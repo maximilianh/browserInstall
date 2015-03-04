@@ -59,9 +59,9 @@ echo Detected OS: $OS/$DIST, $VER
 
 if [ "${1:-}" == "update" ]; then
    # update the CGIs
-   rsync -avzP hgdownload.cse.ucsc.edu::cgi-bin/ $APACHEDIR/cgi-bin/
+   rsync -avzP --delete --exclude hg.conf hgdownload.cse.ucsc.edu::cgi-bin/ $APACHEDIR/cgi-bin/
    # update the html docs
-   rsync -avzP hgdownload.cse.ucsc.edu::htdocs/ $APACHEDIR/htdocs/ 
+   rsync -avzP --delete --exclude trash hgdownload.cse.ucsc.edu::htdocs/ $APACHEDIR/htdocs/ 
    # assign all downloaded files to a valid user. 
    chown -R $APACHEUSER.$APACHEUSER $APACHEDIR/*
    echo update finished
