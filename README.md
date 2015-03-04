@@ -8,7 +8,7 @@ The script has been tested with Ubuntu 14 LTS, Centos 6, Centos 7 and Fedora 20.
 
 Run this script as root like this:
 
-    su
+    sudo -i
     wget https://raw.githubusercontent.com/maximilianh/browserInstall/master/browserInstall.sh
     bash browserInstall.sh
 
