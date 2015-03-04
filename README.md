@@ -22,5 +22,5 @@ if you want to install a complete genome assembly on your local machine. Rsync i
 
 When you want to update an existing installation, you can call the script with the "update" parameter like this: "bash browserInstall.sh update".
 
-If you find a bug or your linux distribution is not supported, please file file pull requests or open an issue here or email me. For other installation problems, you can contact genome-mirror@soe.ucsc.edu. 
+If you find a bug or your linux distribution is not supported, please file pull requests or open an issue here or email me. For other installation problems, you can contact genome-mirror@soe.ucsc.edu. 
 More details about the Genome Browser installation are at http://genome-source.cse.ucsc.edu/gitweb/?p=kent.git;a=tree;f=src/product
