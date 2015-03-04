@@ -14,10 +14,10 @@ Run this script as root like this:
 
 The script goes through three steps:
 
-# Mysql and Apache are installed and setup with the right package manager (yum or apt-get). The package manager will ask you define a password for Mysql. The script then stops and asks you to add your mysql root user credentials to /root/.my.cnf and re-run the script with the "download" parameter.
-# The script then downloads the CGIs and sets up the central Mysql database. It
+1. Mysql and Apache are installed and setup with the right package manager (yum or apt-get). The package manager will ask you define a password for Mysql. The script then stops and asks you to add your mysql root user credentials to /root/.my.cnf and re-run the script with the "download" parameter.
+2. The script then downloads the CGIs and sets up the central Mysql database. It
 then stops and asks you to try out the installation from your internet browser
-# You can rerun the script with the "get <database>" (e.g. "get hg19") parameter
+3. You can rerun the script with the "get <database>" (e.g. "get hg19") parameter
 if you want to install a complete genome assembly on your local machine. Rsync is used for this download.
 
 When you want to update an existing installation, you can call the script with the "update" parameter like this: "bash browserInstall.sh update".
