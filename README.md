@@ -6,8 +6,12 @@ how to download genome assemblies to the local machine.
 
 The script has been tested with Ubuntu 14 LTS, Centos 6, Centos 7 and Fedora 20.
 
-Run this script as root, preferably on a recently installed machine, which is what we tested.
+Run this script as root, preferably on a freshly installed machine, which is what we tested.
 
     su
     wget https://raw.githubusercontent.com/maximilianh/browserInstall/master/browserInstall.sh
     bash browserInstall.sh
+
+If your linux distribution is not supported, you can file pull requests, open an issue here
+or contact genome-mirror@soe.ucsc.edu. 
+More installation instructions are at http://genome-source.cse.ucsc.edu/gitweb/?p=kent.git;a=tree;f=src/product
