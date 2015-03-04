@@ -9,8 +9,8 @@
 set -u -e -o pipefail # fail on unset vars and all errors, also in pipes
 
 APACHEDIR=/usr/local/apache
-APACHECONFURL=http://hgwdev.soe.ucsc.edu/~max/gbInstall/001-browser.conf
-HGCONFURL=http://hgwdev.soe.ucsc.edu/~max/gbInstall/hg.conf.mirror 
+APACHECONFURL=https://raw.githubusercontent.com/maximilianh/browserInstall/master/apache.conf
+HGCONFURL=https://raw.githubusercontent.com/maximilianh/browserInstall/master/hg.conf
 MYSQLDIR=/var/lib/mysql
 
 if [ "$EUID" -ne 0 ]

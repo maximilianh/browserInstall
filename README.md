@@ -8,6 +8,6 @@ The script has been tested with Ubuntu 14 LTS, Centos 6, Centos 7 and Fedora 20.
 
 Run this script as root, preferably on a recently installed machine, which is what we tested.
 
-  su
-  wget
-  bash browserInstall.sh
+    su
+    wget https://raw.githubusercontent.com/maximilianh/browserInstall/master/browserInstall.sh
+    bash browserInstall.sh
