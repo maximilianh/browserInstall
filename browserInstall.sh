@@ -340,7 +340,7 @@ fi
 if [ "${1:-}" == "get" ]; then
    DBS=${*:2}
    echo
-   echo Now downloading these databases from the UCSC download server: $DBS
+   echo Now downloading these databases plus hgFixed and proteome from the UCSC download server: $DBS
    echo Press any key...
    read -n 1 -s
 
@@ -353,5 +353,12 @@ if [ "${1:-}" == "get" ]; then
       mkdir -p /gbdb
       rsync -avzp hgdownload.cse.ucsc.edu::gbdb/$db/ /gbdb/$db/
       chown -R $APACHEUSER.$APACHEUSER /gbdb/$db
+   done
+
+   echo Now downloading species-independent mysql databases...
+   for db in proteome uniProt go hgFixed; do
+      echo Downloading Mysql files for DB $db
+      rsync -avzp hgdownload.cse.ucsc.edu::mysql/$db/ $MYSQLDIR/$db/
+      chown -R mysql.mysql $MYSQLDIR/$db
    done
 fi
