@@ -8,17 +8,79 @@
 
 set -u -e -o pipefail # fail on unset vars and all errors, also in pipes
 
+# ---- GLOBAL DEFAULT SETTINGS ----
+
+# main directory where CGI-BIN and htdocs are downloaded to
 APACHEDIR=/usr/local/apache
+
+# apache config file
 APACHECONFURL=https://raw.githubusercontent.com/maximilianh/browserInstall/master/apache.conf
+
+# genome browser default config file
 HGCONFURL=https://raw.githubusercontent.com/maximilianh/browserInstall/master/hg.conf
+
+# mysql data directory 
 MYSQLDIR=/var/lib/mysql
+
+# command to ask user to press a key, can be removed with -b
+WAITKEY='read -n 1 -s'
+
+# default download server, can be changed with -a
+HGDOWNLOAD='hgdownload.cse.ucsc.edu'
+
+# ---- END GLOBAL DEFAULT SETTINGS ----
+
+# --- error handling --- 
+function errorHandler ()
+{
+    echo Error: the UCSC Genome Browser installation script failed with an error
+    echo You can run it again with '"bash -x '$0'"' to see what failed.
+    echo You can also send us an email with the error message.
+    exit $?
+}
+trap errorHandler ERR
+
+# --- error handler end --- 
+
+# START OF SCRIPT 
 
 if [ "$EUID" -ne 0 ]
   then echo "This script must be run as root"
   exit 1
 fi
 
-# detect the OS version
+# OPTION PARSING
+
+while getopts ":b:a:h" opt; do
+  case $opt in
+    h)
+      echo $0 - UCSC genome browser install script
+      echo parameters:
+      echo   'no parameter     - setup Apache and Mysql'
+      echo   'download           - download the CGI scripts'
+      echo   'get <databaseList> - download Mysql + /gbdb files for a list of genomes'
+      echo
+      echo options:
+      echo '  -a   - use alternative download server at SDSC'
+      echo '  -b   - batch mode, do not prompt for key presses'
+      echo '  -h   - this help message'
+      exit 0
+      ;;
+    b)
+      WAITKEY='echo'
+      ;;
+    a)
+      HGDOWNLOAD=hgdownload-sd.sdsc.edu
+      ;;
+    \?)
+      echo "Invalid option: -$OPTARG" >&2
+      ;;
+  esac
+done
+# reset the $1, etc variables after getopts
+shift $(($OPTIND - 1))
+
+# detect the OS version, linux distribution
 unameStr=`uname`
 DIST=none
 if [[ "$unameStr" == "Darwin" ]]; then
@@ -50,31 +112,43 @@ if [ "$DIST" == "none" ]; then
     exit 3
 fi
 
-echo UCSC Genome Browser installation script
-echo Detected OS: $OS/$DIST, $VER
-
 # UPDATE MODE, parameter "update": This is not for the initial install, but
 # later, when the user wants to update the browser. This can be used from
 # cronjobs.
+# This currently does NOT update the Mysql databases
 
 if [ "${1:-}" == "update" ]; then
    # update the CGIs
-   rsync -avzP --delete --exclude hg.conf hgdownload.cse.ucsc.edu::cgi-bin/ $APACHEDIR/cgi-bin/
+   rsync -avzP --delete --exclude hg.conf $HGDOWNLOAD::cgi-bin/ $APACHEDIR/cgi-bin/ --exclude RNAplot
    # update the html docs
-   rsync -avzP --delete --exclude trash hgdownload.cse.ucsc.edu::htdocs/ $APACHEDIR/htdocs/ 
+   rsync -avzP --delete --exclude trash $HGDOWNLOAD::htdocs/ $APACHEDIR/htdocs/ 
    # assign all downloaded files to a valid user. 
    chown -R $APACHEUSER.$APACHEUSER $APACHEDIR/*
    echo update finished
    exit 10
 fi
 
-# Start with apache/mysql setup if the script is run without a parameter
+# Start apache/mysql setup if the script is run without a parameter
 
 if [[ "$#" == "0" ]]; then
-    echo This script will now install/configure mysql and apache if not yet installed. 
-    echo It will also open port 80/http.
-    echo Please press any key...
-    read -n 1 -s
+    echo '--------------------------------'
+    echo UCSC Genome Browser installation
+    echo '--------------------------------'
+    echo Detected OS: $OS/$DIST, $VER
+    echo 
+    echo This script will go through three steps:
+    echo "1 - setup apache and mysql, deactivate SELinux, open port 80"
+    echo "2 - copy CGI binaries into $APACHEDIR"
+    echo "3 - optional: download genome assembly databases into mysql and /gbdb"
+    echo
+    echo This script will now install and configure Mysql and Apache if they are not yet installed. 
+    echo "Your distribution's package manager will be used for this."
+    echo If Mysql is not installed yet, you will be asked to enter a new Mysql root password.
+    echo It can can be different from the root password of this machine.
+    echo
+    echo This script will also deactivate SELinux if active and open port 80/http.
+    echo Please press any key to continue...
+    $WAITKEY
     
     # -----  DEBIAN / UBUNTU - SPECIFIC part
     if [[ "$DIST" == "debian" ]]; then
@@ -144,7 +218,7 @@ if [[ "$#" == "0" ]]; then
             echo Installing Mysql
             yum -y install $MYSQLPKG
 
-            # Fedora 20 has the package mysql-server but it contains mariadb
+            # Fedora 20 names the package mysql-server but it actually contains mariadb
             MYSQLD=mysqld
             MYSQLVER=`mysql --version`
             if [[ $MYSQLVER =~ "MariaDB" ]]; then
@@ -191,7 +265,7 @@ if [[ "$#" == "0" ]]; then
            echo The Genome Browser requires that SELINUX is deactivated.
            echo Deactivating it now.
            echo Please press any key...
-           read -n 1 -s
+           $WAITKEY
            setenforce 0
            sed -i 's/^SELINUX=.*/SELINUX=disabled/g' /etc/sysconfig/selinux
         fi
@@ -202,18 +276,18 @@ if [[ "$#" == "0" ]]; then
     if [ ! -f ~/.my.cnf ]; then
        echo '[client]' >> ~/.my.cnf
        echo user=root >> ~/.my.cnf
-       echo password=YOURPASSWORD >> ~/.my.cnf
+       echo password=YOURMYSQLPASSWORD >> ~/.my.cnf
        chmod 600 ~/.my.cnf
 
        echo
        echo A file ${HOME}/.my.cnf was created with default values
-       echo Edit the file ${HOME}/.my.cnf and replace YOURPASSWORD with the mysql root
-       echo password that you defined for your mysql installation.
+       echo Edit the file ${HOME}/.my.cnf and replace YOURMYSQLPASSWORD with the mysql root password that you
+       echo defined during the mysql installation.
     else
        echo
        echo A file ${HOME}/.my.cnf already exists
        echo Edit the file ${HOME}/.my.cnf and make sure there is a '[client]' section
-       echo and under it at least two lines with 'user=root' and 'password=YOURPASSWORD'.
+       echo and under it at least two lines with 'user=root' and 'password=YOURMYSQLPASSWORD'.
     fi
 
     echo "Then run this script again with the parameter download (bash $0 download) to continue."
@@ -223,6 +297,24 @@ fi
 # MYSQL CONFIGURATION and CGI DOWNLOAD
 
 if [ "${1:-}" == "download" ]; then
+    echo --------------------------------
+    echo UCSC Genome Browser installation
+    echo --------------------------------
+    echo Detected OS: $OS/$DIST, $VER
+    echo 
+    # test if the apache dir is already present
+    if [ -f "$APACHEDIR" ]; then
+        echo error: please remove the file $APACHEDIR, then restart the script with "$0 download".
+        exit 249
+    fi
+
+    if [ -d "$APACHEDIR" ]; then
+        echo error: the directory $APACHEDIR already exists.
+        echo This installer has to overwrite it, so please move it to a different name
+        echo or remove it. Then start the installer again with "$0 download"
+        exit 250
+    fi
+
     # test if we can connect to the mysql server
     # need to temporarilydeactivate error abort mode, in case mysql cannot connect
     set +e 
@@ -237,11 +329,15 @@ if [ "${1:-}" == "download" ]; then
     # -------------------
     # Mysql setup
     # -------------------
-    echo Creating Mysql databases customTrash and hgcentral
+    echo Creating Mysql databases customTrash, hgTemp and hgcentral
     echo Please press any key...
-    read -n 1 -s
-    mysql -e 'create database if not exists customTrash; create database if not exists hgcentral;'
-    wget -q http://hgdownload.cse.ucsc.edu/admin/hgcentral.sql -O - | mysql hgcentral
+    $WAITKEY
+    mysql -e 'CREATE DATABASE IF NOT EXISTS customTrash;'
+    mysql -e 'CREATE DATABASE IF NOT EXISTS hgcentral;'
+    mysql -e 'CREATE DATABASE IF NOT EXISTS hgTemp;'
+    wget -q http://$HGDOWNLOAD/admin/hgcentral.sql -O - | mysql hgcentral
+    # the blat servers don't have fully qualified domain names in the download data
+    mysql hgcentral -e 'UPDATE blatServers SET host=CONCAT(host,".cse.ucsc.edu");'
 
     echo
     echo "Will now grant permissions to browser database access users:"
@@ -249,7 +345,7 @@ if [ "${1:-}" == "download" ]; then
     echo "User: 'readonly', password: 'access' - read only access for CGI binaries"
     echo "User: 'readwrite', password: 'update' - readwrite access for hgcentral DB"
     echo Please press any key...
-    read -n 1 -s
+    $WAITKEY
     
     #  Full access to all databases for the user 'browser'
     #       This would be for browser developers that need read/write access
@@ -268,17 +364,25 @@ if [ "${1:-}" == "download" ]; then
     #   Read only access to genome databases for the browser CGI binaries
     mysql -e "GRANT SELECT, CREATE TEMPORARY TABLES on "\
 "*.* TO readonly@localhost IDENTIFIED BY 'access';"
+    mysql -e "GRANT SELECT, INSERT, CREATE TEMPORARY TABLES on hgTemp.* TO "\
+"readonly@localhost IDENTIFIED BY 'access';"
 
     # Readwrite access to hgcentral for browser CGI binaries to maintain session state
     mysql -e "GRANT SELECT, INSERT, UPDATE, "\
 "DELETE, CREATE, DROP, ALTER on hgcentral.* TO readwrite@localhost "\
 "IDENTIFIED BY 'update';"
 
+    # create /gbdb and let the apache user write to it
+    # hgConvert will download missing liftOver files on the fly and needs write
+    # write access
+    mkdir -p /gbdb
+    chown $APACHEUSER.$APACHEUSER /gbdb
+
     # the custom track database needs it own user and permissions
     mysql -e "GRANT SELECT,INSERT,UPDATE,DELETE,CREATE,DROP,ALTER,INDEX "\
 "on customTrash.* TO ctdbuser@localhost IDENTIFIED by 'ctdbpassword';"
 
-    # by default hgGateway needs an empty hg19 database
+    # by default hgGateway needs an empty hg19 database, will crash otherwise
     mysql -e 'CREATE DATABASE IF NOT EXISTS hg19'
 
     mysql -e "FLUSH PRIVILEGES;"
@@ -289,7 +393,7 @@ if [ "${1:-}" == "download" ]; then
    echo
    echo Now creating /usr/local/apache and downloading its files from UCSC via rsync
    echo Please press any key...
-   read -n 1 -s
+   $WAITKEY
    # create apache directories: HTML files, CGIs, temporary and custom track files
    mkdir -p $APACHEDIR/htdocs $APACHEDIR/cgi-bin $APACHEDIR/trash $APACHEDIR/trash/customTrash
 
@@ -309,10 +413,12 @@ if [ "${1:-}" == "download" ]; then
    fi
 
    # download the CGIs
-   rsync -avzP hgdownload.cse.ucsc.edu::cgi-bin/ $APACHEDIR/cgi-bin/
+   # don't download RNAplot, it's a 32bit binary that won't work
+   # this means that hgGene cannot show RNA structures but that's not a big issue
+   rsync -avzP $HGDOWNLOAD::cgi-bin/ $APACHEDIR/cgi-bin/ --exclude RNAplot
 
    # download the html docs
-   rsync -avzP hgdownload.cse.ucsc.edu::htdocs/ $APACHEDIR/htdocs/ 
+   rsync -avzP #HGDOWNLOAD::htdocs/ $APACHEDIR/htdocs/ 
 
    # assign all files just downloaded to a valid user. 
    # This also allows apache to write into the trash dir
@@ -325,7 +431,7 @@ if [ "${1:-}" == "download" ]; then
    echo through the internet from UCSC. From most locations on the world, this is very slow.
    echo
    echo If you want to download a genome and all its files now, call this script with
-   echo the parameters "get <name>", e.g. "bash browserInstall.sh get mm10"
+   echo the parameters '"get <name>"', e.g. '"'bash $0 get mm10'"'
    echo 
    echo Also note that by the installation assumes that emails cannot be sent from
    echo this machine. New browser user accounts will not receive confirmation emails.
@@ -342,23 +448,23 @@ if [ "${1:-}" == "get" ]; then
    echo
    echo Now downloading these databases plus hgFixed and proteome from the UCSC download server: $DBS
    echo Press any key...
-   read -n 1 -s
+   $WAITKEY
 
    for db in $DBS; do
       echo Downloading Mysql files for DB $db
-      rsync -avzp hgdownload.cse.ucsc.edu::mysql/$db/ $MYSQLDIR/$db/
+      rsync -avzp $HGDOWNLOAD::mysql/$db/ $MYSQLDIR/$db/
       chown -R mysql.mysql $MYSQLDIR/$db
 
       echo Downloading /gbdb files for DB $db
       mkdir -p /gbdb
-      rsync -avzp hgdownload.cse.ucsc.edu::gbdb/$db/ /gbdb/$db/
+      rsync -avzp $HGDOWNLOAD::gbdb/$db/ /gbdb/$db/
       chown -R $APACHEUSER.$APACHEUSER /gbdb/$db
    done
 
    echo Now downloading species-independent mysql databases...
    for db in proteome uniProt go hgFixed; do
       echo Downloading Mysql files for DB $db
-      rsync -avzp hgdownload.cse.ucsc.edu::mysql/$db/ $MYSQLDIR/$db/
+      rsync -avzp $HGDOWNLOAD::mysql/$db/ $MYSQLDIR/$db/
       chown -R mysql.mysql $MYSQLDIR/$db
    done
 fi
