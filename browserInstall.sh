@@ -34,8 +34,11 @@ GBDBDIR=/gbdb
 # udr binary URL
 UDRURL=https://raw.githubusercontent.com/maximilianh/browserInstall/master/udr
 
+# rsync is a variable so it can be udr
+RSYNC=rsync
+
 # by default, most ENCODE files are not downloaded
-RSYNCOPTS="--include wgEncodeGencode* --include wgEncodeRegTfbsClustered* --include wgEncodeRegMarkH3k27ac* --include wgEncodeRegDnaseClustered* --exclude wgEncode*"
+RSYNCOPTS="--include=wgEncodeGencode* --include=wgEncodeRegTfbsClustered* --include=wgEncodeRegMarkH3k27ac* --include=wgEncodeRegDnaseClustered* --exclude=wgEncode*"
 
 # ---- END GLOBAL DEFAULT SETTINGS ----
 
@@ -60,10 +63,11 @@ fi
 
 # OPTION PARSING
 
-while getopts ":b:a:h" opt; do
+while getopts ":baueh" opt; do
   case $opt in
     h)
-      echo $0 - UCSC genome browser install script
+      echo $0 '[options] [download|get] [dbList] - UCSC genome browser install script'
+      echo
       echo parameters:
       echo   'no parameter       - setup Apache and Mysql'
       echo   'download           - download the CGI scripts'
@@ -89,10 +93,7 @@ while getopts ":b:a:h" opt; do
       RSYNCOPTS=""
       ;;
     u)
-      if [[ ! -f /usr/local/bin/udr ]]; then
-          curl $UDRURL > /usr/local/bin/udr
-          chmod a+x /usr/local/bin/udr
-      fi
+      RSYNC="/usr/local/bin/udr rsync"
       ;;
     \?)
       echo "Invalid option: -$OPTARG" >&2
@@ -325,6 +326,13 @@ if [[ "$#" == "0" ]]; then
     exit 0
 fi
 
+# Download over own statically compiled udr binary
+if [[ ! -f /usr/local/bin/udr && "$RSYNC" = *udr* ]]; then
+echo Downloading udr into /usr/local/bin
+wget -q $UDRURL -O /usr/local/bin/udr
+chmod a+x /usr/local/bin/udr
+fi
+
 # MYSQL CONFIGURATION and CGI DOWNLOAD
 
 if [ "${1:-}" == "download" ]; then
@@ -446,10 +454,10 @@ if [ "${1:-}" == "download" ]; then
    # download the CGIs
    # don't download RNAplot, it's a 32bit binary that won't work
    # this means that hgGene cannot show RNA structures but that's not a big issue
-   rsync -avzP $HGDOWNLOAD::cgi-bin/ $APACHEDIR/cgi-bin/ --exclude RNAplot
+   $RSYNC -avzP --exclude RNAplot $HGDOWNLOAD::cgi-bin/ $APACHEDIR/cgi-bin/
 
    # download the html docs
-   rsync -avzP $HGDOWNLOAD::htdocs/ $APACHEDIR/htdocs/ 
+   $RSYNC -avzP $HGDOWNLOAD::htdocs/ $APACHEDIR/htdocs/ 
 
    # assign all files just downloaded to a valid user. 
    # This also allows apache to write into the trash dir
@@ -500,14 +508,14 @@ if [ "${1:-}" == "get" ]; then
    # now do the actual download
    for db in $DBS proteome uniProt go hgFixed; do
       echo Downloading Mysql files for DB $db
-      rsync -avzp $HGDOWNLOAD::mysql/$db/ $MYSQLDIR/$db/ $RSYNCOPTS
+      $RSYNC -avzp $RSYNCOPTS $HGDOWNLOAD::mysql/$db/ $MYSQLDIR/$db/ 
       chown -R mysql.mysql $MYSQLDIR/$db
    done
 
    for db in $DBS; do
       echo Downloading $GBDBDIR files for DB $db
       mkdir -p $GBDBDIR
-      rsync -avzp $HGDOWNLOAD::gbdb/$db/ $GBDBDIR/$db/ $RSYNCOPTS
+      $RSYNC -avzp $RSYNCOPTS $HGDOWNLOAD::gbdb/$db/ $GBDBDIR/$db/
       chown -R $APACHEUSER.$APACHEUSER $GBDBDIR/$db
    done
 
