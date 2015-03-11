@@ -31,6 +31,12 @@ HGDOWNLOAD='hgdownload.cse.ucsc.edu'
 # default GBDB dir
 GBDBDIR=/gbdb
 
+# udr binary URL
+UDRURL=https://raw.githubusercontent.com/maximilianh/browserInstall/master/udr
+
+# by default, most ENCODE files are not downloaded
+RSYNCOPTS="--include wgEncodeGencode* --include wgEncodeRegTfbsClustered* --include wgEncodeRegMarkH3k27ac* --include wgEncodeRegDnaseClustered* --exclude wgEncode*"
+
 # ---- END GLOBAL DEFAULT SETTINGS ----
 
 # --- error handling --- 
@@ -61,11 +67,15 @@ while getopts ":b:a:h" opt; do
       echo parameters:
       echo   'no parameter       - setup Apache and Mysql'
       echo   'download           - download the CGI scripts'
-      echo   'get <databaseList> - download Mysql + /gbdb files for a list of genomes'
+      echo   'get <databaseList> - download Mysql + /gbdb files for a space-separated'
+      echo   '                     list of genomes'
       echo
       echo options:
       echo '  -a   - use alternative download server at SDSC'
       echo '  -b   - batch mode, do not prompt for key presses'
+      echo '  -e   - download all ENCODE files. By default, most Encode files are not downloaded.'
+      echo '  -u   - use UDR (fast UDP) file transfers for the download. Requires at least one '
+      echo '         open UDP incoming port between 9000 - 9100'
       echo '  -h   - this help message'
       exit 0
       ;;
@@ -74,6 +84,15 @@ while getopts ":b:a:h" opt; do
       ;;
     a)
       HGDOWNLOAD=hgdownload-sd.sdsc.edu
+      ;;
+    e)
+      RSYNCOPTS=""
+      ;;
+    u)
+      if [[ ! -f /usr/local/bin/udr ]]; then
+          curl $UDRURL > /usr/local/bin/udr
+          chmod a+x /usr/local/bin/udr
+      fi
       ;;
     \?)
       echo "Invalid option: -$OPTARG" >&2
@@ -462,13 +481,15 @@ if [ "${1:-}" == "get" ]; then
    echo
    echo Determining download file size... please wait...
    
-   echo > /tmp/browserInstallTmp
+   # use rsync to get total size of files in directories and sum the numbers up with awk
    for db in $DBS proteome uniProt go hgFixed; do
-       rsync -avn $HGDOWNLOAD::mysql/$db/ $MYSQLDIR/$db/ | grep ^'total size' | cut -d' ' -f4 | tr -d ', ' 
+       rsync -avn $HGDOWNLOAD::mysql/$db/ $MYSQLDIR/$db/ $RSYNCOPTS | grep ^'total size' | cut -d' ' -f4 | tr -d ', ' 
    done | awk '{ sum += $1 } END { print "Required space in '$GBDBDIR':", sum/1000000000, "GB" }'
+
    for db in $DBS; do
-       rsync -avn $HGDOWNLOAD::gbdb/$db/ $GBDBDIR/$db/ | grep ^'total size' | cut -d' ' -f4 | tr -d ','
+       rsync -avn $HGDOWNLOAD::gbdb/$db/ $GBDBDIR/$db/ $RSYNCOPTS | grep ^'total size' | cut -d' ' -f4 | tr -d ','
    done | awk '{ sum += $1 } END { print "Required space in '$MYSQLDIR':", sum/1000000000, "GB" }'
+
    echo
    echo Currently available disk space on this system:
    df -h 
@@ -476,16 +497,17 @@ if [ "${1:-}" == "get" ]; then
    echo Press any key to continue or Ctrl-C to abort
    $WAITKEY
 
+   # now do the actual download
    for db in $DBS proteome uniProt go hgFixed; do
       echo Downloading Mysql files for DB $db
-      rsync -avzp $HGDOWNLOAD::mysql/$db/ $MYSQLDIR/$db/
+      rsync -avzp $HGDOWNLOAD::mysql/$db/ $MYSQLDIR/$db/ $RSYNCOPTS
       chown -R mysql.mysql $MYSQLDIR/$db
    done
 
    for db in $DBS; do
       echo Downloading $GBDBDIR files for DB $db
       mkdir -p $GBDBDIR
-      rsync -avzp $HGDOWNLOAD::gbdb/$db/ $GBDBDIR/$db/
+      rsync -avzp $HGDOWNLOAD::gbdb/$db/ $GBDBDIR/$db/ $RSYNCOPTS
       chown -R $APACHEUSER.$APACHEUSER $GBDBDIR/$db
    done
 
