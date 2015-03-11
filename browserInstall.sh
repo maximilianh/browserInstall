@@ -28,6 +28,9 @@ WAITKEY='read -n 1 -s'
 # default download server, can be changed with -a
 HGDOWNLOAD='hgdownload.cse.ucsc.edu'
 
+# default GBDB dir
+GBDBDIR=/gbdb
+
 # ---- END GLOBAL DEFAULT SETTINGS ----
 
 # --- error handling --- 
@@ -384,8 +387,8 @@ if [ "${1:-}" == "download" ]; then
     # create /gbdb and let the apache user write to it
     # hgConvert will download missing liftOver files on the fly and needs write
     # write access
-    mkdir -p /gbdb
-    chown $APACHEUSER.$APACHEUSER /gbdb
+    mkdir -p $GBDBDIR
+    chown $APACHEUSER.$APACHEUSER $GBDBDIR
 
     # the custom track database needs it own user and permissions
     mysql -e "GRANT SELECT,INSERT,UPDATE,DELETE,CREATE,DROP,ALTER,INDEX "\
@@ -455,14 +458,22 @@ fi
 if [ "${1:-}" == "get" ]; then
    DBS=${*:2}
    echo
-   echo Now downloading these databases plus hgFixed and proteome from the UCSC download server: $DBS
-   echo Press any key...
-   for db in $DBS; do
-       rsync -n $HGDOWNLOAD::mysql/$db/ $MYSQLDIR/$db/
-   done
+   echo Downloading databases $DBS plus hgFixed/proteome/go from the UCSC download server
+   echo
+   echo Determining download file size... please wait...
+   
+   echo > /tmp/browserInstallTmp
    for db in $DBS proteome uniProt go hgFixed; do
-       rsync -n $HGDOWNLOAD::gbdb/$db/ /gbdb/$db/
-   done
+       rsync -avn $HGDOWNLOAD::mysql/$db/ $MYSQLDIR/$db/ | grep ^'total size' | cut -d' ' -f4 | tr -d ', ' 
+   done | awk '{ sum += $1 } END { print "Required space in '$GBDBDIR':", sum/1000000000, "GB" }'
+   for db in $DBS; do
+       rsync -avn $HGDOWNLOAD::gbdb/$db/ $GBDBDIR/$db/ | grep ^'total size' | cut -d' ' -f4 | tr -d ','
+   done | awk '{ sum += $1 } END { print "Required space in '$MYSQLDIR':", sum/1000000000, "GB" }'
+   echo
+   echo Currently available disk space on this system:
+   df -h 
+   echo 
+   echo Press any key to continue or Ctrl-C to abort
    $WAITKEY
 
    for db in $DBS proteome uniProt go hgFixed; do
@@ -472,10 +483,10 @@ if [ "${1:-}" == "get" ]; then
    done
 
    for db in $DBS; do
-      echo Downloading /gbdb files for DB $db
-      mkdir -p /gbdb
-      rsync -avzp $HGDOWNLOAD::gbdb/$db/ /gbdb/$db/
-      chown -R $APACHEUSER.$APACHEUSER /gbdb/$db
+      echo Downloading $GBDBDIR files for DB $db
+      mkdir -p $GBDBDIR
+      rsync -avzp $HGDOWNLOAD::gbdb/$db/ $GBDBDIR/$db/
+      chown -R $APACHEUSER.$APACHEUSER $GBDBDIR/$db
    done
 
 fi
