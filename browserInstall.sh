@@ -56,7 +56,7 @@ while getopts ":b:a:h" opt; do
     h)
       echo $0 - UCSC genome browser install script
       echo parameters:
-      echo   'no parameter     - setup Apache and Mysql'
+      echo   'no parameter       - setup Apache and Mysql'
       echo   'download           - download the CGI scripts'
       echo   'get <databaseList> - download Mysql + /gbdb files for a list of genomes'
       echo
@@ -103,6 +103,15 @@ if [[ "$(expr substr $(uname -s) 1 5)" == "Linux" ]] ; then
         VER=$(cat /etc/redhat-release)
         APACHECONF=/etc/httpd/conf.d/001-browser.conf
         APACHEUSER=apache
+    elif [[ -f /etc/os-release ]]; then
+        # line looks like this on Amazon AMI Linux: 'ID_LIKE="rhel fedora"'
+        source /etc/os-release
+        if [[ $ID_LIKE == rhel* ]]; then
+                DIST=redhat
+                VER=$VERSION
+                APACHECONF=/etc/httpd/conf.d/001-browser.conf
+                APACHEUSER=apache
+        fi
     fi
 fi
 
@@ -418,7 +427,7 @@ if [ "${1:-}" == "download" ]; then
    rsync -avzP $HGDOWNLOAD::cgi-bin/ $APACHEDIR/cgi-bin/ --exclude RNAplot
 
    # download the html docs
-   rsync -avzP #HGDOWNLOAD::htdocs/ $APACHEDIR/htdocs/ 
+   rsync -avzP $HGDOWNLOAD::htdocs/ $APACHEDIR/htdocs/ 
 
    # assign all files just downloaded to a valid user. 
    # This also allows apache to write into the trash dir
@@ -433,7 +442,7 @@ if [ "${1:-}" == "download" ]; then
    echo If you want to download a genome and all its files now, call this script with
    echo the parameters '"get <name>"', e.g. '"'bash $0 get mm10'"'
    echo 
-   echo Also note that by the installation assumes that emails cannot be sent from
+   echo Also note the installation assumes that emails cannot be sent from
    echo this machine. New browser user accounts will not receive confirmation emails.
    echo To change this, edit the file $APACHEDIR/cgi-bin/hg.conf and modify the settings
    echo 'that start with "login.", mainly "login.mailReturnAddr"'.
@@ -448,23 +457,25 @@ if [ "${1:-}" == "get" ]; then
    echo
    echo Now downloading these databases plus hgFixed and proteome from the UCSC download server: $DBS
    echo Press any key...
+   for db in $DBS; do
+       rsync -n $HGDOWNLOAD::mysql/$db/ $MYSQLDIR/$db/
+   done
+   for db in $DBS proteome uniProt go hgFixed; do
+       rsync -n $HGDOWNLOAD::gbdb/$db/ /gbdb/$db/
+   done
    $WAITKEY
 
-   for db in $DBS; do
+   for db in $DBS proteome uniProt go hgFixed; do
       echo Downloading Mysql files for DB $db
       rsync -avzp $HGDOWNLOAD::mysql/$db/ $MYSQLDIR/$db/
       chown -R mysql.mysql $MYSQLDIR/$db
+   done
 
+   for db in $DBS; do
       echo Downloading /gbdb files for DB $db
       mkdir -p /gbdb
       rsync -avzp $HGDOWNLOAD::gbdb/$db/ /gbdb/$db/
       chown -R $APACHEUSER.$APACHEUSER /gbdb/$db
    done
 
-   echo Now downloading species-independent mysql databases...
-   for db in proteome uniProt go hgFixed; do
-      echo Downloading Mysql files for DB $db
-      rsync -avzp $HGDOWNLOAD::mysql/$db/ $MYSQLDIR/$db/
-      chown -R mysql.mysql $MYSQLDIR/$db
-   done
 fi
