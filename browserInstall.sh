@@ -59,14 +59,14 @@ trap errorHandler ERR
 
 # START OF SCRIPT 
 
-if [ "$EUID" -ne 0 ]
-  then echo "This script must be run as root"
+if [[ "$EUID" != "0" ]]; then
+  echo "This script must be run as root"
   exit 1
 fi
 
 # OPTION PARSING
 
-while getopts ":baueh" opt; do
+while getopts ":bauehof" opt; do
   case $opt in
     h)
       echo $0 '[options] [download|get] [dbList] - UCSC genome browser install script'
@@ -80,10 +80,15 @@ while getopts ":baueh" opt; do
       echo options:
       echo '  -a   - use alternative download server at SDSC'
       echo '  -b   - batch mode, do not prompt for key presses'
-      echo '  -e   - only with "get": download all ENCODE files. By default, most Encode'
-      echo '         files are not downloaded.'
-      echo '  -u   - only with "get": use UDR (fast UDP) file transfers for the download.'
+      echo '  -e   - when downloading hg19, download all ENCODE files. By default, only'
+      echo '         our recommended selection of best-of-ENCODE files is downloaded.'
+      echo '  -u   - use UDR (fast UDP) file transfers for the download.'
       echo '         Requires at least one open UDP incoming port 9000-9100.'
+      echo '  -o   - offline-mode. Remove all statements from hg.conf that allow loading'
+      echo '         data on-the-fly from the UCSC download server. Requires that you have'
+      echo '         downloaded at least one assembly.'
+      echo '  -f   - on-the-fly mode. Change hg.conf to allow loading data through the'
+      echo '         internet, if it is not available locally. The default mode.'
       echo '  -h   - this help message'
       exit 0
       ;;
@@ -98,6 +103,38 @@ while getopts ":baueh" opt; do
       ;;
     u)
       RSYNC="/usr/local/bin/udr rsync"
+      ;;
+    o)
+      # three types of data can be remote: mysql data and gbdb data 
+      # SHOW TABLES results can be cached remotely. All three are 
+      # deactivated with the following:
+      # first make sure we do not have them commented out already
+      sed -i 's/^#slow-db\./slow-db\./g' $APACHEDIR/cgi-bin/hg.conf
+      sed -i 's/^#gbdbLoc1=/gbdbLoc1=/g' $APACHEDIR/cgi-bin/hg.conf
+      sed -i 's/^#gbdbLoc2=/gbdbLoc2=/g' $APACHEDIR/cgi-bin/hg.conf
+      sed -i 's/^#showTableCache=/showTableCache=/g' $APACHEDIR/cgi-bin/hg.conf
+
+      # now comment them out
+      sed -i 's/^slow-db\./#slow-db\./g' $APACHEDIR/cgi-bin/hg.conf
+      sed -i 's/^gbdbLoc1=/#gbdbLoc1=/g' $APACHEDIR/cgi-bin/hg.conf
+      sed -i 's/^gbdbLoc2=/#gbdbLoc2=/g' $APACHEDIR/cgi-bin/hg.conf
+      sed -i 's/^showTableCache=/#showTableCache=/g' $APACHEDIR/cgi-bin/hg.conf
+      echo $APACHEDIR/cgi-bin/hg.conf was modified. 
+      echo Offline mode: data is loaded only from the local Mysql database and file system.
+      echo Use the parameter -f to switch to on-the-fly mode.
+      exit 0
+      ;;
+    f)
+      # allow on-the-fly loading of sql, file data and allow local table name caching
+      sed -i 's/^#slow-db\./slow-db\./g' $APACHEDIR/cgi-bin/hg.conf
+      sed -i 's/^#gbdbLoc1=/gbdbLoc1=/g' $APACHEDIR/cgi-bin/hg.conf
+      sed -i 's/^#gbdbLoc2=/gbdbLoc2=/g' $APACHEDIR/cgi-bin/hg.conf
+      sed -i 's/^#showTableCache=/showTableCache=/g' $APACHEDIR/cgi-bin/hg.conf
+
+      echo $APACHEDIR/cgi-bin/hg.conf was modified. 
+      echo On-the-fly mode activated: data is loaded from UCSC when not present locally.
+      echo Use the parameter -o to switch to offline mode.
+      exit 0
       ;;
     \?)
       echo "Invalid option: -$OPTARG" >&2
