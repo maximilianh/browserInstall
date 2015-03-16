@@ -38,7 +38,10 @@ UDRURL=https://raw.githubusercontent.com/maximilianh/browserInstall/master/udr
 RSYNC=rsync
 
 # by default, most ENCODE files are not downloaded
-RSYNCOPTS="--include=wgEncodeGencode* --include=wgEncodeRegTfbsClustered* --include=wgEncodeRegMarkH3k27ac* --include=wgEncodeRegDnaseClustered* --exclude=wgEncode*"
+RSYNCOPTS="--include=wgEncodeGencode* --include=wgEncodeRegTfbsClustered* --include=wgEncodeRegMarkH3k27ac* --include=wgEncodeRegDnaseClustered* --include=wgEncodeReg* --include=wgEncodeAwgTfbsUniform --include=wgEncodeAwgSegmentation* --include=wgEncodeAwgDnaseMasterSites* --include=wgEncodeMapability*  --exclude=wgEncode*"
+
+# alternative?
+# --include='*/' --exclude='wgEncode*.bam' hgdownload.soe.ucsc.edu::gbdb/hg19/ ./  -h
 
 # ---- END GLOBAL DEFAULT SETTINGS ----
 
@@ -77,9 +80,10 @@ while getopts ":baueh" opt; do
       echo options:
       echo '  -a   - use alternative download server at SDSC'
       echo '  -b   - batch mode, do not prompt for key presses'
-      echo '  -e   - download all ENCODE files. By default, most Encode files are not downloaded.'
-      echo '  -u   - use UDR (fast UDP) file transfers for the download. Requires at least one '
-      echo '         open UDP incoming port between 9000 - 9100'
+      echo '  -e   - only with "get": download all ENCODE files. By default, most Encode'
+      echo '         files are not downloaded.'
+      echo '  -u   - only with "get": use UDR (fast UDP) file transfers for the download.'
+      echo '         Requires at least one open UDP incoming port 9000-9100.'
       echo '  -h   - this help message'
       exit 0
       ;;
@@ -508,14 +512,14 @@ if [ "${1:-}" == "get" ]; then
    # now do the actual download
    for db in $DBS proteome uniProt go hgFixed; do
       echo Downloading Mysql files for DB $db
-      $RSYNC -avzp $RSYNCOPTS $HGDOWNLOAD::mysql/$db/ $MYSQLDIR/$db/ 
+      $RSYNC --progress -avzp $RSYNCOPTS $HGDOWNLOAD::mysql/$db/ $MYSQLDIR/$db/ 
       chown -R mysql.mysql $MYSQLDIR/$db
    done
 
    for db in $DBS; do
       echo Downloading $GBDBDIR files for DB $db
       mkdir -p $GBDBDIR
-      $RSYNC -avzp $RSYNCOPTS $HGDOWNLOAD::gbdb/$db/ $GBDBDIR/$db/
+      $RSYNC --progress -avzp $RSYNCOPTS $HGDOWNLOAD::gbdb/$db/ $GBDBDIR/$db/
       chown -R $APACHEUSER.$APACHEUSER $GBDBDIR/$db
    done
 
