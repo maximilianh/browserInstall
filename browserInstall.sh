@@ -196,7 +196,9 @@ while getopts ":bauehof" opt; do
       echo   '<assemblyList>     - download Mysql + /gbdb files for a space-separated'
       echo   '                     list of genomes'
       echo
-      echo example:
+      echo examples:
+      echo   bash $0             - install Genome Browser, download hg19 and mm9, switch to
+      echo                         on-the-fly mode '(see the -f option)'
       echo   bash $0 hg19 mm9    - install Genome Browser, download hg19 and mm9, switch to
       echo                         offline mode '(see the -o option)'
       echo
@@ -212,7 +214,7 @@ while getopts ":bauehof" opt; do
       echo '         downloaded at least one assembly. Default if at least one assembly has'
       echo '         been specified.'
       echo '  -f   - on-the-fly mode. Change hg.conf to allow loading data through the'
-      echo '         internet, if it is not available locally. The default mode unless an.'
+      echo '         internet, if it is not available locally. The default mode unless an'
       echo '         assembly has been provided during install'
       echo '  -h   - this help message'
       exit 0
