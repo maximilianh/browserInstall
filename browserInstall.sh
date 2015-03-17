@@ -355,7 +355,7 @@ fi
 # -----  OSX - SPECIFIC part -----
 if [[ "$DIST" == "OSX" ]]; then
    # check for xcode
-   if xcode-select --help 2> /dev/null; then
+   if [ -f /usr/bin/xcode-select ]; then
        echo Found XCode
    else
        echo 'This installer has to compile the UCSC tools locally on OSX.'
