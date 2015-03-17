@@ -425,7 +425,25 @@ if [[ "$DIST" == "OSX" ]]; then
       echo Now installing Mysql 5.6 with macports
       waitKey
 
-      moveAwayMyCnf
+      if [ -f ~root/.my.cnf ]; then
+        echo
+        echo A file ~root/.my.cnf already exists.
+        echo
+        echo It appears that you had previously installed Mysql on this machine
+        echo As Mysql will be re-installed now, the old root password will still be active.
+        echo
+        echo If the script stops with a Mysql permission problem, you have to 
+        echo update the file ~/.my.cnf with the correct password if you remember it or
+        echo reset the Mysql root password. 
+        echo To reset the Mysql root password:
+        echo   port unload mysql56-server 
+        echo   /opt/local/lib/mysql56/bin/mysqld_safe --skip-grant-tables '&'
+        echo   mysql --user=root mysql -e "'"'update user set Password=PASSWORD("new-password-here") WHERE User="root";'"'"
+        echo   kill %%
+        echo Wait until Mysql is stopped. Then restart this script.
+        exit 127
+
+      fi
       # install mysql
       port install mysql56-server
    fi
