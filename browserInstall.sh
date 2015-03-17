@@ -890,9 +890,10 @@ fi
 DBS=${*:1}
 
 if [[ "$DBS" == "" ]]; then
+   echo
    echo The browser seems to be installed on this machine already, the file $COMPLETEFLAG exists.
    echo
-   echo If you have not downloaded any genome assemblies yet, data is possibly accesses from UCSC,
+   echo If you have not downloaded any genome assemblies yet, data is loaded from UCSC,
    echo which is very slow and requires outgoing TCP port 3306 to be open.
    echo
    echo To download data files to your own machine, call this script with a list of genome assemblies, e.g. 
