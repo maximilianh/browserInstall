@@ -352,6 +352,17 @@ fi
 
 # -----  OSX - SPECIFIC part -----
 if [[ "$DIST" == "OSX" ]]; then
+   # check for xcode
+   if xcode-select 2> /dev/null; then
+       echo Found XCode
+   else
+       echo 'This installer has to compile the UCSC tools locally on OSX.'
+       echo 'Please install XCode from https://developer.apple.com/xcode/downloads/'
+       echo 'Also install the right pkg installer of MacPorts from https://www.macports.org/install.php'
+       echo 'Then run this script again'
+       exit 101
+   fi
+
    if port usage 2> /dev/null; then
        echo Found MacPorts
    else
@@ -849,6 +860,20 @@ fi
 # GENOME DOWNLOAD
 
 DBS=${*:1}
+
+if [[ "$DBS" == "" ]]; then
+   echo The browser seems to be installed on this machine already, the file $COMPLETEFLAG exists.
+   echo
+   echo There might be no genome assemblies downloaded, so data might be accesses from UCSC,
+   echo which is very slow and requires outgoing TCP port 3306 to be open.
+   echo
+   echo To download files locally, You can call this script with a list of genome assemblies, e.g. 
+   echo   bash $0 cb1 ce6
+   echo
+   echo Run '"'bash $0'"' -h to get information on options.
+   echo 
+   exit 125
+fi
 
 echo
 echo Downloading databases $DBS plus hgFixed/proteome/go from the UCSC download server
