@@ -877,10 +877,16 @@ if [ ! -f $COMPLETEFLAG ]; then
        echo
        echo Notice that this mirror is still configured to use Mysql and data files loaded
        echo through the internet from UCSC. From most locations on the world, this is very slow.
+       echo It also requires an open outgoing TCP port 3306 for Mysql to genome-mysql.cse.ucsc.edu
+       echo and open TCP port 80 to hgdownload.soe.ucsc.edu.
        echo
        echo To speed up the installation, you need to download genome data to the local
        echo disk. To download a genome assembly and all its files now, call this script again with
        echo the parameters '"<assemblyName1> <assemblyName2> ..."', e.g. '"'bash $0 mm10 hg19'"'
+       echo 
+       echo It seems that the address to contact this machine is 
+       # http://unix.stackexchange.com/questions/22615/how-can-i-get-my-external-ip-address-in-bash
+       echo http://`wget http://icanhazip.com -O - -q`
        echo 
        exit 0
     fi
