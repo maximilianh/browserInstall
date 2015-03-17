@@ -846,7 +846,8 @@ if [ ! -f $COMPLETEFLAG ]; then
        sed -i "/^hgc\./s/.usr.lib.gmt.bin/\/usr\/bin/" $APACHEDIR/cgi-bin/hg.conf
     elif [ "$DIST" == "OSX" ]; then
        # in OSX also no need to specify sockets
-       sed -i "/socket=/s/^/#/" $APACHEDIR/cgi-bin/hg.conf
+       # note that the sed -i syntax is different from linux
+       sed -i bak "/socket=/s/^/#/" $APACHEDIR/cgi-bin/hg.conf
     fi
     
     # download the CGIs
