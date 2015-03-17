@@ -392,6 +392,10 @@ if [[ "$DIST" == "OSX" ]]; then
 
    # install apache2
    if port installed apache2 | grep None > /dev/null; then
+       echo 
+       echo Now installing apache2 with macports
+       waitKey
+
        port install apache2
    fi
 
@@ -417,6 +421,10 @@ if [[ "$DIST" == "OSX" ]]; then
    # MYSQL INSTALL, mostly copied from https://trac.macports.org/wiki/howto/MySQL
 
    if port installed mysql56-server | grep None > /dev/null; then
+      echo 
+      echo Now installing Mysql 5.6 with macports
+      waitKey
+
       moveAwayMyCnf
       # install mysql
       port install mysql56-server
@@ -447,7 +455,8 @@ if [[ "$DIST" == "OSX" ]]; then
    # make sure to use macports specific mysqladmin
    MYSQLADMIN=/opt/local/lib/mysql56/bin/mysqladmin
     
-   echo OSX specific part of the installation successful
+   echo OSX specific part of the installation successful, apache2 and Mysql are run on system start
+   echo
 
 # -----  DEBIAN / UBUNTU - SPECIFIC part
 elif [[ "$DIST" == "debian" ]]; then
