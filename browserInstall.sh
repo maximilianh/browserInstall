@@ -172,8 +172,14 @@ function setupCgiOsx ()
 # START OF SCRIPT 
 
 if [[ "$EUID" != "0" ]]; then
-  echo "This script must be run as root"
+  echo "This script must be run as root or with sudo like this:"
+  echo "sudo -H $0"
   exit 1
+fi
+
+# On Debian and OSX, sudo by default does not update the HOME variable (hence the -H option above)
+if [[ "$SUDO_USER" != "" ]]; then
+   export HOME=~root
 fi
 
 trap errorHandler ERR
