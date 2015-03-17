@@ -787,7 +787,7 @@ if [ ! -f $COMPLETEFLAG ]; then
     # CGI installation
     # -------------------
     echo
-    echo Now creating /usr/local/apache and downloading its files from UCSC via rsync or udr
+    echo Now creating /usr/local/apache and downloading contents from UCSC
     waitKey
     
     # create apache directories: HTML files, CGIs, temporary and custom track files
@@ -806,6 +806,9 @@ if [ ! -f $COMPLETEFLAG ]; then
     if [ "$DIST" == "redhat" ]; then
        sed -i "/socket=/s/^/#/" $APACHEDIR/cgi-bin/hg.conf
        sed -i "/^hgc\./s/.usr.lib.gmt.bin/\/usr\/bin/" $APACHEDIR/cgi-bin/hg.conf
+    elif [ "$DIST" == "OSX" ]; then
+       # in OSX also no need to specify sockets
+       sed -i "/socket=/s/^/#/" $APACHEDIR/cgi-bin/hg.conf
     fi
     
     # download the CGIs
