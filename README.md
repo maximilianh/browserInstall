@@ -21,12 +21,12 @@ On OSX, use curl:
 The script goes through three steps:
 
 1. Mysql and Apache are installed and setup with the right package manager (yum or apt-get or port). A default random password is set for the Mysql root user and added to the ~/.my.cnf file of the Unix root account. 
-1.1 If you already have setup Mysql, you would need to create to create the file ~/.my.cnf, the script will detect this and create a template file for you.
+    1.1 If you already have setup Mysql, you would need to create to create the file ~/.my.cnf, the script will detect this and create a template file for you.
 2. The script then downloads the CGIs and sets up the central Mysql database. It
 stops and asks you to try out the installation from your internet browser.
 3. You can run the script with a list genome assemblies (e.g. bash browserInstall.sh hg19).
 if you want to install a complete genome assembly on your local machine. Rsync is used for this download. 
-3.1 Alternatively you can use UDR a UDP-based fast transfer protocol (bash browserInstall.sh -u hg19). Call the script with -h to get a list of the parameters (bash browserInstall.sh -h). 
+    3.1 Alternatively you can use UDR a UDP-based fast transfer protocol (bash browserInstall.sh -u hg19). Call the script with -h to get a list of the parameters (bash browserInstall.sh -h). 
 
 When you want to update an existing installation, you can call the script with the "update" parameter like this: "bash browserInstall.sh update".
 
