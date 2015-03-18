@@ -6,6 +6,13 @@ how to download genome assemblies to the local machine.
 
 The script has been tested with Ubuntu 14 LTS, Centos 6, Centos 7, Fedora 20 and OSX 10.10.
 
+It has also been tested on virtual machines in Amazon EC2 (Centos 6 and Ubuntu
+14) and Microsoft Azure (Ubuntu). If you do not want to download the full genome assembly,
+you need to select the data centers called "San Francisco" (Amazon) or "West
+Coast" (Microsoft) for best performance. Other data centers (e.g. East Coast) will require a local
+copy of the genome assembly, which can mean 2TB-6TB of storage for the hg19 assembly. Note that this
+exceeds the current maximum size of a single Amazon EBS volume.
+
 Run this script as root like this:
 
     sudo -i
