@@ -558,6 +558,8 @@ if [[ "$DIST" == "OSX" ]]; then
        echo2
        echo2 Creating the basic Mysql databases and securing them
        waitKey
+       # paranoia, stop mysql server
+       port unload mysql56-server || true
        # create the basic DBs
        sudo -u _mysql mysql_install_db
        # make sure permissions are OK, maybe complete paranoia
