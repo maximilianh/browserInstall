@@ -570,6 +570,10 @@ if [[ "$DIST" == "OSX" ]]; then
        sudo chown -R _mysql:_mysql /opt/local/var/log/mysql56/ 
        # now we can start the mysql server
        port load mysql56-server || true
+       echo2
+       echo2 Waiting 10secs for mysql to start...
+       echo2
+       sleep 10
        # secure the mysql install
        secureMysql
        # set a random root password later
