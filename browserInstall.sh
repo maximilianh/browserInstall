@@ -556,10 +556,12 @@ if [[ "$DIST" == "OSX" ]]; then
        waitKey
        # create the basic DBs
        sudo -u _mysql mysql_install_db
-       # adapt permissions
+       # make sure permissions are OK, maybe complete paranoia
        sudo chown -R _mysql:_mysql /opt/local/var/db/mysql56/
        sudo chown -R _mysql:_mysql /opt/local/var/run/mysql56/ 
        sudo chown -R _mysql:_mysql /opt/local/var/log/mysql56/ 
+       # now we can start the mysql server
+       port load mysql56-server || true
        # secure the mysql install
        secureMysql
        # set a random root password later
