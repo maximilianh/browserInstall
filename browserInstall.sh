@@ -714,7 +714,7 @@ fi
 # so test if we can connect to the mysql server
 # need to temporarily deactivate error abort mode, in case mysql cannot connect
 
-if mysql -e "SHOW TABLES;" mysql 2> /dev/null > /dev/null; then
+if mysql -e "SHOW DATABASES;" 2> /dev/null > /dev/null; then
     true
 else
     echo2 "ERROR:"
