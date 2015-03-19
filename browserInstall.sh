@@ -529,18 +529,22 @@ if [[ "$DIST" == "OSX" ]]; then
         echo2 A file ~root/.my.cnf already exists.
         echo2
         echo2 It appears that you had previously installed Mysql on this machine
-        echo2 As Mysql will be re-installed now, the old root password will still be active.
+        echo2 As Mysql will be re-installed now, the old root password may still be active.
         echo2
         echo2 If the script stops with a Mysql permission problem, you have to 
-        echo2 update the file ~/.my.cnf with the correct password if you remember it or
-        echo2 reset the Mysql root password. 
+        echo2 update the file ~/.my.cnf with the correct password if you remember it.
+        echo2 The alternative is to reset the Mysql root password. 
+        echo2
         echo2 To reset the Mysql root password:
         echo2   port unload mysql56-server 
         echo2   /opt/local/lib/mysql56/bin/mysqld_safe --skip-grant-tables '&'
-        echo2   mysql --user=root mysql -e "'"'update user set Password=PASSWORD("new-password-here") WHERE User="root";'"'"
+        echo2   mysql --user=root mysql -e "'"'update user set Password=PASSWORD("NEWPASSWORD") WHERE User="root";'"'"
         echo2   kill %%
-        echo2 Wait until Mysql is stopped. Then restart this script.
-        exit 127
+        echo2
+        echo2 Wait until Mysql has stopped.
+        echo2 Do not forget to write the password NEWPASSWORD also to the file ~root/.my.cnf
+        echo2 Then restart this script.
+        waitKey
 
       fi
       # install mysql
@@ -678,7 +682,7 @@ if [[ "${SET_MYSQL_ROOT}" == "1" ]]; then
        # and write it to my.cnf
        if [ ! -f ~root/.my.cnf ]; then
            echo2
-           echo2 Writing password to /root/.my.cnf so root does not have to provide a password on the 
+           echo2 Writing password to ~root/.my.cnf so root does not have to provide a password on the 
            echo2 command line.
            echo '[client]' >> ~root/.my.cnf
            echo user=root >> ~root/.my.cnf
