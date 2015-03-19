@@ -561,7 +561,9 @@ if [[ "$DIST" == "OSX" ]]; then
        # paranoia, stop mysql server
        port unload mysql56-server || true
        # create the basic DBs
-       sudo -u _mysql mysql_install_db
+       #sudo -u _mysql mysql_install_db
+       # looks like the script needs sudo rights
+       mysql_install_db
        # make sure permissions are OK, maybe complete paranoia
        sudo chown -R _mysql:_mysql /opt/local/var/db/mysql56/
        sudo chown -R _mysql:_mysql /opt/local/var/run/mysql56/ 
