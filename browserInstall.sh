@@ -165,6 +165,7 @@ function setupCgiOsx ()
     # now compile the genome browser CGIs
     export USE_SAMTABIX=1
     export SAMTABIXDIR=$APACHEDIR/kent/samtabix
+    export MYSQLLIBS='-L/opt/local/lib/mysql56/mysql  -lmysqlclient  -lz'
     cd $APACHEDIR/kent/src
     make libs
 
@@ -219,8 +220,10 @@ function installRedhat () {
     if [ -f /etc/init.d/iptables ]; then
        echo2 Opening port 80 for incoming connections to Apache
        waitKey
-       iptables -I INPUT 1 -i eth0 -p tcp --dport 80 -m state --state NEW,ESTABLISHED -j ACCEPT
+       iptables -I INPUT 1 -p tcp --dport 80 -j ACCEPT
+       iptables -I INPUT 1 -p tcp --dport 443 -j ACCEPT
        service iptables save
+       service iptables restart
     fi
     
     # MYSQL INSTALL ON REDHAT, quite involved, as MariaDB is increasingly the default

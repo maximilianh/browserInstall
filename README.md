@@ -40,3 +40,5 @@ The script also does many small things, like placing the symlinks, detecting mar
 
 If you find a bug or your linux distribution is not supported, please file pull requests or open an issue here or email me. For other installation problems, you can contact genome-mirror@soe.ucsc.edu. 
 More details about the Genome Browser installation are at http://genome-source.cse.ucsc.edu/gitweb/?p=kent.git;a=tree;f=src/product
+
+Thanks to Daniel Vera (bio.fsu.edu) for his RHEL install notes.
