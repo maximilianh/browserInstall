@@ -507,8 +507,8 @@ elif [[ "$unameStr" == Darwin* ]]; then
     APACHEUSER=_www
     MYSQLDIR=$APACHEDIR/mysqlData
     MYSQLUSER=_mysql
-    MYSQL=mysql --socket=$APACHEDIR/ext/mysql.socket
-    MYSQLADMIN=$APACHEDIR/ext/mysqladmin --socket=$APACHEDIR/ext/mysql.socket
+    MYSQL="mysql --socket=$APACHEDIR/ext/mysql.socket"
+    MYSQLADMIN="$APACHEDIR/ext/mysqladmin --socket=$APACHEDIR/ext/mysql.socket"
 
 elif [[ $unameStr == Linux* ]] ; then
     OS=linux
