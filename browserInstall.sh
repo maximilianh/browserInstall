@@ -185,9 +185,10 @@ if [[ "$DIST" == "OSX" ]]; then
    echo2 You can browse the genome at http://127.0.0.1:8080
    /usr/bin/open http://127.0.0.1:8080
 else
-   echo2 The address to access this installation is either http://127.0.0.1 or 
-   # http://unix.stackexchange.com/questions/22615/how-can-i-get-my-external-ip-address-in-bash
-   echo2 http://`downloadFileQuiet http://icanhazip.com quiet`
+   echo2 You can now access this server under one of these IP addresses: 
+   echo2 From same host:    http://127.0.0.1
+   echo2 From same network: http://`ip route get 8.8.8.8 | awk 'NR==1 {print $NF}'`
+   echo2 From the internet: http://`downloadFileQuiet http://icanhazip.com`
 fi
 echo2
 }
@@ -1124,10 +1125,10 @@ if [ ! -f $COMPLETEFLAG ]; then
         # don't download RNAplot, it's a 32bit binary that won't work
         # this means that hgGene cannot show RNA structures but that's not a big issue
         $RSYNC -avzP --exclude RNAplot $HGDOWNLOAD::cgi-bin/ $APACHEDIR/cgi-bin/
-        
-        # download the html docs
-        $RSYNC -avzP $HGDOWNLOAD::htdocs/ $APACHEDIR/htdocs/ 
     fi
+        
+    # download the html docs
+    $RSYNC -avzP $HGDOWNLOAD::htdocs/ $APACHEDIR/htdocs/ 
     
     # assign all files just downloaded to a valid user. 
     # This also allows apache to write into the trash dir
@@ -1242,8 +1243,8 @@ echo2
 showMyAddress
 
 echo2 
-echo2 Note that this installation assumes that emails cannot be sent from
-echo2 this machine. New browser user accounts will not receive confirmation emails.
+echo2 Note that the installation assumes that emails cannot be sent from
+echo2 this machine. New Genome Browser user accounts will not receive confirmation emails.
 echo2 To change this, edit the file $APACHEDIR/cgi-bin/hg.conf and modify the settings
 echo2 'that start with "login.", mainly "login.mailReturnAddr"'.
 echo2
