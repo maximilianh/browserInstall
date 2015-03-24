@@ -451,8 +451,8 @@ function installOsx ()
        # server root provided on command line, note BSD sed -i option
        $SEDINPLACE 's/^ServerRoot/#ServerRoot/' $APACHECONFDIR/httpd.conf
        # need cgi and SSI - not needed anymore, are now compiled into apache
-       # $SEDINPLACE 's/^#LoadModule include_module/LoadModule include_module/' $APACHECONFDIR/httpd.conf
-       # $SEDINPLACE 's/^#LoadModule cgid_module/LoadModule cgid_module/' $APACHECONFDIR/httpd.conf
+       $SEDINPLACE 's/^#LoadModule include_module/LoadModule include_module/' $APACHECONFDIR/httpd.conf
+       $SEDINPLACE 's/^#LoadModule cgid_module/LoadModule cgid_module/' $APACHECONFDIR/httpd.conf
        # OSX has special username/group for apache
        $SEDINPLACE 's/^User .*$/User _www/' $APACHECONFDIR/httpd.conf
        $SEDINPLACE 's/^Group .*$/Group _www/' $APACHECONFDIR/httpd.conf
@@ -630,7 +630,7 @@ cd ..
 
 # now compile, compile SSL statically so there is no confusion with Apple's SSL
 # also include expat, otherwise Apple's expat conflicts
-./configure --prefix=$APACHEDIR/ext --enable-ssl --with-ssl=$APACHEDIR/ext --enable-ssl-staticlib-deps  --enable-mods-static=ssl --with-expat=builtin --with-pcre=$APACHEDIR/ext/bin/pcre-config --enable-pcre=static --disable-shared --with-apr=$APACHEDIR/ext/bin/apr-1-config --with-apr-util=$APACHEDIR/ext/bin/apu-1-config --enable-modules="all ssl cache"
+./configure --prefix=$APACHEDIR/ext --enable-ssl --with-ssl=$APACHEDIR/ext --enable-ssl-staticlib-deps  --enable-mods-static=ssl --with-expat=builtin --with-pcre=$APACHEDIR/ext/bin/pcre-config --enable-pcre=static --disable-shared --with-apr=$APACHEDIR/ext/bin/apr-1-config --with-apr-util=$APACHEDIR/ext/bin/apu-1-config --enable-modules="all ssl cache include cgid"
 
 make -j2
 make install
