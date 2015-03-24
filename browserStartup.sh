@@ -7,18 +7,18 @@ set -e
 APACHEDIR=/usr/local/apache
 BASEDIR=$APACHEDIR/ext
 
-# kill and start mysql
+# try to kill and start mysql
 if [ -f $BASEDIR/logs/mysql.pid ]; then
-   kill `cat $BASEDIR/logs/mysql.pid`
+   kill `cat $BASEDIR/logs/mysql.pid` || true
    sleep 3
 fi
 if [ -f $BASEDIR/bin/mysqld_safe ]; then
     $BASEDIR/bin/mysqld_safe --defaults-file=$BASEDIR/my.cnf --user=_mysql --pid-file=$BASEDIR/logs/mysql.pid &
 fi
 
-# kill and start apache
+# try to kill and start apache
 if [ -f "$BASEDIR/logs/httpd.pid" ]; then
-   kill `cat $BASEDIR/logs/httpd.pid`
+   kill `cat $BASEDIR/logs/httpd.pid` || true
 fi
 if [ -f $BASEDIR/bin/httpd ]; then
    $BASEDIR/bin/httpd -d "$BASEDIR"
