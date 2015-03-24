@@ -166,13 +166,13 @@ function secureMysql ()
 # When we install Mysql, make sure we do not have an old .my.cnf lingering around
 function moveAwayMyCnf () 
 {
-if [ -f ~root/.my.cnf ]; then
+if [ -f ~/.my.cnf ]; then
    echo2
-   echo2 Mysql is going to be installed, but the file ~root/.my.cnf already exists
+   echo2 Mysql is going to be installed, but the file ~/.my.cnf already exists
    echo2 The file will be renamed to .my.cnf.old so it will not interfere with the
    echo2 installation.
    waitKey
-   mv ~root/.my.cnf ~root/.my.cnf.old
+   mv ~/.my.cnf ~/.my.cnf.old
 fi
 }
 
@@ -379,11 +379,11 @@ function installOsx ()
        #launchctl unload -w /System/Library/LaunchDaemons/org.apache.httpd.plist 2> /dev/null || true
    #fi
 
-   if [ -f ~root/.my.cnf ]; then
+   if [ -f ~/.my.cnf ]; then
        echo2
-       echo2 ~root/.my.cnf already exists. This will interfere with the installation.
-       echo2 The file will be renamed to ~root/.my.cnf.old now.
-       mv ~root/.my.cnf ~root/.my.cnf.old
+       echo2 ~/.my.cnf already exists. This will interfere with the installation.
+       echo2 The file will be renamed to ~/.my.cnf.old now.
+       mv ~/.my.cnf ~/.my.cnf.old
        waitKey
    fi
 
@@ -647,8 +647,8 @@ rm libpng-1.6.16.tar.gz
 function mysqlChangeRootPwd ()
 {
    # first check if an old password still exists in .my.cnf
-   if [ -f ~root/.my.cnf ]; then
-       echo2 ~root/.my.cnf already exists, you might want to remove this file
+   if [ -f ~/.my.cnf ]; then
+       echo2 ~/.my.cnf already exists, you might want to remove this file
        echo2 and restart the script if an error message appears below.
        echo2
    fi
@@ -669,17 +669,17 @@ function mysqlChangeRootPwd ()
    # now set the mysql root password
    if $MYSQLADMIN -u root password $MYSQLROOTPWD; then
        # and write it to my.cnf
-       if [ ! -f ~root/.my.cnf ]; then
+       if [ ! -f ~/.my.cnf ]; then
            echo2
-           echo2 Writing password to ~root/.my.cnf so root does not have to provide a password on the 
+           echo2 Writing password to ~/.my.cnf so root does not have to provide a password on the 
            echo2 command line.
-           echo '[client]' >> ~root/.my.cnf
-           echo user=root >> ~root/.my.cnf
-           echo password=${MYSQLROOTPWD} >> ~root/.my.cnf
-           chmod 600 ~root/.my.cnf
+           echo '[client]' >> ~/.my.cnf
+           echo user=root >> ~/.my.cnf
+           echo password=${MYSQLROOTPWD} >> ~/.my.cnf
+           chmod 600 ~/.my.cnf
            waitKey
         else
-           echo2 ~root/.my.cnf already exists, not changing it.
+           echo2 ~/.my.cnf already exists, not changing it.
         fi 
    else
        echo2 Could not connect to mysql to set the root password to $MYSQLROOTPWD.
@@ -687,12 +687,12 @@ function mysqlChangeRootPwd ()
        echo2 Please reset the root password to an empty password by following these
        echo2 instructions: http://dev.mysql.com/doc/refman/5.0/en/resetting-permissions.html
        echo2 Then restart the script.
-       echo2 Or, if you remember the old root password, write it to a file ~root/.my.cnf, 
+       echo2 Or, if you remember the old root password, write it to a file ~/.my.cnf, 
        echo2 create three lines
        echo2 '[client]'
        echo2 user=root
        echo2 password=PASSWORD
-       echo2 run chmod 600 ~root/.my.cnf and restart this script.
+       echo2 run chmod 600 ~/.my.cnf and restart this script.
        exit 123
    fi
 }
@@ -706,11 +706,11 @@ else
     echo2 "Cannot connect to mysql database server, a root password has probably been setup before."
     # create a little basic .my.cnf for the current root user
     # so the mysql root password setup is easier
-    if [ ! -f ~root/.my.cnf ]; then
-       echo '[client]' >> ~root/.my.cnf
-       echo user=root >> ~root/.my.cnf
-       echo password=YOURMYSQLPASSWORD >> ~root/.my.cnf
-       chmod 600 ~root/.my.cnf
+    if [ ! -f ~/.my.cnf ]; then
+       echo '[client]' >> ~/.my.cnf
+       echo user=root >> ~/.my.cnf
+       echo password=YOURMYSQLPASSWORD >> ~/.my.cnf
+       chmod 600 ~/.my.cnf
        echo2
        echo2 A file ${HOME}/.my.cnf was created with default values
        echo2 Edit the file ${HOME}/.my.cnf and replace YOURMYSQLPASSWORD with the mysql root password that you
