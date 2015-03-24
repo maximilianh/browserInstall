@@ -274,7 +274,7 @@ function installRedhat () {
     fi
     
     # download the apache config
-    if [ ! -f $APACHECONF]; then
+    if [ ! -f $APACHECONF ]; then
         echo2
         echo2 Creating the Apache2 config file $APACHECONF
         waitKey
