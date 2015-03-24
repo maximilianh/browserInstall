@@ -1228,7 +1228,7 @@ echo2 and use your UCSC Genome Browser mirror.
 echo2
 
 if [[ "$DIST" == "OSX" ]]; then
-   echo2 You can browser the genome now at http://127.0.0.1:8080
+   echo2 You can browse the genome at http://127.0.0.1:8080
    /usr/bin/open http://127.0.0.1:8080
 else
    echo2 The address to access this installation is either http://127.0.0.1 or 
