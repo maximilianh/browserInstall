@@ -357,7 +357,7 @@ function installRedhat () {
 function installOsx () 
 {
    # check for xcode
-   if [ -f /usr/bin/xcode-select ]; then
+   if [ -f /usr/bin/xcode-select 2> /dev/null > /dev/null ]; then
        echo2 Found XCode
    else
        echo2
@@ -822,7 +822,7 @@ if [[ "$EUID" != "0" ]]; then
 fi
 
 # On Debian and OSX, sudo by default does not update the HOME variable (hence the -H option above)
-if [[ "$SUDO_USER" != "" ]]; then
+if [[ "${SUDO_USER:-}" != "" ]]; then
    export HOME=~root
 fi
 
