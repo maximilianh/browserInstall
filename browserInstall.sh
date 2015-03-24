@@ -226,7 +226,7 @@ function setupCgiOsx ()
     export BINDIR=$APACHEDIR/util
 
     export PATH=$BINDIR:$PATH
-    mkdir -p $APACHEDIR/bin
+    mkdir -p $APACHEDIR/util
 
     cd $APACHEDIR
     # get the kent src tree
@@ -370,7 +370,7 @@ function installOsx ()
 
    # make sure that the xcode command line tools are installed
    echo2 Checking/Installing Xcode Command line tools
-   xcode-select --install 2> /dev/null  || true
+   xcode-select --install 2> /dev/null >/dev/null  || true
 
    # in case that it is running, try to stop Apple's personal web server, we need access to port 80
    # ignore any error messages
