@@ -10,12 +10,11 @@ set -u -e -o pipefail # fail on unset vars and all errors, also in pipes
 
 # ---- GLOBAL DEFAULT SETTINGS ----
 
-# main directory where CGI-BIN and htdocs are downloaded to
+# directory where CGI-BIN and htdocs are downloaded to
 APACHEDIR=/usr/local/apache
 
 # apache config file
 APACHECONFURL=https://raw.githubusercontent.com/maximilianh/browserInstall/master/apache.conf
-
 # genome browser default config file
 HGCONFURL=https://raw.githubusercontent.com/maximilianh/browserInstall/master/hg.conf
 
@@ -42,19 +41,39 @@ HGDOWNLOAD='hgdownload.cse.ucsc.edu'
 # default GBDB dir
 GBDBDIR=/gbdb
 
+# sed -i has a different syntax on OSX
+SEDINPLACE="sed -ri"
+
 # udr binary URL
 UDRURL=https://raw.githubusercontent.com/maximilianh/browserInstall/master/udr
 
 # rsync is a variable so it can be udr
 RSYNC=rsync
 
-# by default, most ENCODE files are not downloaded
-RSYNCOPTS="--include=wgEncodeGencode* --include=wgEncodeBroadHistone* --include=wgEncodeReg* --include=wgEncodeAwg* --include=wgEncode*Mapability* --exclude=wgEncode*"
+# by default, everything is downloaded
+RSYNCOPTS=""
 # alternative?
 # --include='*/' --exclude='wgEncode*.bam' hgdownload.soe.ucsc.edu::gbdb/hg19/ ./  -h
 
 # a flagfile to indicate that the cgis were installed successfully
 COMPLETEFLAG=/usr/local/apache/cgiInstallComplete.flag
+
+# on OSX by default we download a pre-compiled package that includes Apache/Mysql/OpenSSL
+# change this to 1 to rebuild all of these locally from tarballs
+BUILDEXT=${BUILDEXT:-0}
+# On OSX, by default download the CGIs as a binary package
+# change this to 1 to rebuild CGIs locally from tarball
+BUILDKENT=${BUILDKENT:-0}
+
+# URL of a tarball with a the binaries of Apache/Mysql/Openssl
+BINPKGURL=http://hgwdev.soe.ucsc.edu/~max/gbInstall/mysqlApacheOSX_10_10.tgz
+# URL of tarball with the OSX CGI binaries
+CGIBINURL=http://hgwdev.soe.ucsc.edu/~max/gbInstall/kentCgi_OSX_10.10.tgz 
+# URL of tarball with a minimal Mysql data directory
+MYSQLDBURL=http://hgwdev.soe.ucsc.edu/~max/gbInstall/mysql56Data.tgz
+# mysql/apache startup script URL, currently only for OSX
+STARTSCRIPTURL=https://raw.githubusercontent.com/maximilianh/browserInstall/master/browserStartup.sh
+
 
 # ---- END GLOBAL DEFAULT SETTINGS ----
 
@@ -69,12 +88,24 @@ function echo2 ()
 function downloadFile ()
 {
 url=$1
-fname=$2
 
 if which wget 2> /dev/null > /dev/null; then
     wget -nv $1 -O -
 else
-    curl $1
+    echo '| ' $url > /dev/stderr
+    curl '-#' $1
+fi
+}
+
+# download file to stdout, use either wget or curl
+function downloadFileQuiet ()
+{
+url=$1
+
+if which wget 2> /dev/null > /dev/null; then
+    wget -q $1 -O -
+else
+    curl -s $1
 fi
 }
 
@@ -92,16 +123,16 @@ function errorHandler ()
 function goOffline ()
 {
       # first make sure we do not have them commented out already
-      sed -i 's/^#slow-db\./slow-db\./g' $APACHEDIR/cgi-bin/hg.conf
-      sed -i 's/^#gbdbLoc1=/gbdbLoc1=/g' $APACHEDIR/cgi-bin/hg.conf
-      sed -i 's/^#gbdbLoc2=/gbdbLoc2=/g' $APACHEDIR/cgi-bin/hg.conf
-      sed -i 's/^#showTableCache=/showTableCache=/g' $APACHEDIR/cgi-bin/hg.conf
+      $SEDINPLACE 's/^#slow-db\./slow-db\./g' $APACHEDIR/cgi-bin/hg.conf
+      $SEDINPLACE 's/^#gbdbLoc1=/gbdbLoc1=/g' $APACHEDIR/cgi-bin/hg.conf
+      $SEDINPLACE 's/^#gbdbLoc2=/gbdbLoc2=/g' $APACHEDIR/cgi-bin/hg.conf
+      $SEDINPLACE 's/^#showTableCache=/showTableCache=/g' $APACHEDIR/cgi-bin/hg.conf
 
       # now comment them out
-      sed -i 's/^slow-db\./#slow-db\./g' $APACHEDIR/cgi-bin/hg.conf
-      sed -i 's/^gbdbLoc1=/#gbdbLoc1=/g' $APACHEDIR/cgi-bin/hg.conf
-      sed -i 's/^gbdbLoc2=/#gbdbLoc2=/g' $APACHEDIR/cgi-bin/hg.conf
-      sed -i 's/^showTableCache=/#showTableCache=/g' $APACHEDIR/cgi-bin/hg.conf
+      $SEDINPLACE 's/^slow-db\./#slow-db\./g' $APACHEDIR/cgi-bin/hg.conf
+      $SEDINPLACE 's/^gbdbLoc1=/#gbdbLoc1=/g' $APACHEDIR/cgi-bin/hg.conf
+      $SEDINPLACE 's/^gbdbLoc2=/#gbdbLoc2=/g' $APACHEDIR/cgi-bin/hg.conf
+      $SEDINPLACE 's/^showTableCache=/#showTableCache=/g' $APACHEDIR/cgi-bin/hg.conf
 }
 
 # wait for a key press
@@ -121,6 +152,8 @@ function secureMysql ()
         echo2 Securing the Mysql install by removing the test user, restricting root
         echo2 logins to localhost and dropping the database named test.
         waitKey
+        # do not parse .my.cnf for this, as we're sure that there is no root password yet
+        # MYSQL2=`echo $MYSQL | sed -e 's/ / --no-defaults /'`
         # remove anonymous test users
         $MYSQL -e 'DELETE FROM mysql.user WHERE User="";'
         # remove remote root login
@@ -147,6 +180,16 @@ fi
 # On OSX, we have to compile everything locally
 function setupCgiOsx () 
 {
+    if [[ "$BUILDKENT" == "0" ]]; then
+        echo2
+        echo2 Downloading Precompiled OSX CGI-BIN binaries
+        echo2
+        cd $APACHEDIR
+        downloadFile $CGIBINURL | tar xz
+        chown -R $APACHEUSER:$APACHEUSER cgi-bin/
+        return
+    fi
+
     echo2
     echo2 Now downloading the UCSC source tree into $APACHEDIR/kent
     echo2 The compiled binaries will be installed into $APACHEDIR/cgi-bin
@@ -165,12 +208,14 @@ function setupCgiOsx ()
     export USE_SAMTABIX=1
     export SCRIPTS=$APACHEDIR/util
     export BINDIR=$APACHEDIR/util
+
+    export PATH=$BINDIR:$PATH
     mkdir -p $APACHEDIR/bin
 
     cd $APACHEDIR
     # get the kent src tree
     if [ ! -d kent ]; then
-       curl --remote-name http://hgdownload.cse.ucsc.edu/admin/jksrc.zip
+       downloadFile http://hgdownload.cse.ucsc.edu/admin/jksrc.zip > jksrc.zip
        unzip jksrc.zip
        rm -f jksrc.zip
     fi
@@ -188,19 +233,16 @@ function setupCgiOsx ()
     cd samtabix
     make
 
-    # now compile the genome browser CGIs
-    export USE_SAMTABIX=1
-    export SAMTABIXDIR=$APACHEDIR/kent/samtabix
-    export MYSQLLIBS='-L/opt/local/lib/mysql56/mysql  -lmysqlclient  -lz'
+    # compile the genome browser CGIs
     cd $APACHEDIR/kent/src
     make libs
-
-    make alpha CGI_BIN=$APACHEDIR/cgi-bin BINDIR=/usr/local/bin
-    cd hg/htdocs
-    make DOCUMENTROOT=$APACHEDIR/cgi-bin 
-    # dbTrash tool needed for trash cleaning
-    cd ../hg/dbTrash
+    make cgi-alpha
+    cd hg/dbTrash
     make
+
+    #cd hg/htdocs
+    #make doInstall destDir=$APACHDIR/htdocs FIND="find ."
+    # dbTrash tool needed for trash cleaning
 }
 
 # redhat specific part of mysql and apache installation
@@ -295,15 +337,213 @@ function installRedhat () {
     fi
 }
 
+# OSX specific setup of the installation
+function installOsx () 
+{
+   # check for xcode
+   if [ -f /usr/bin/xcode-select ]; then
+       echo2 Found XCode
+   else
+       echo2
+       echo2 'This installer has to compile the UCSC tools locally on OSX.'
+       echo2 'Please install XCode from https://developer.apple.com/xcode/downloads/'
+       echo2 'Start XCode once and accept the Apple license.'
+       echo2 'Then run this script again.'
+       exit 101
+   fi
+
+   # make sure that the xcode command line tools are installed
+   echo2 Checking/Installing Xcode Command line tools
+   xcode-select --install 2> /dev/null  || true
+
+   # in case that it is running, try to stop Apple's personal web server, we need access to port 80
+   # ignore any error messages
+   #if [ -f /usr/sbin/apachectl ]; then
+       #echo2 Stopping the Apple Personal Web Server
+       #/usr/sbin/apachectl stop 2> /dev/null || true
+       #launchctl unload -w /System/Library/LaunchDaemons/org.apache.httpd.plist 2> /dev/null || true
+   #fi
+
+   if [ -f ~root/.my.cnf ]; then
+       echo2
+       echo2 ~root/.my.cnf already exists. This will interfere with the installation.
+       echo2 The file will be renamed to ~root/.my.cnf.old now.
+       mv ~root/.my.cnf ~root/.my.cnf.old
+       waitKey
+   fi
+
+   # get all external software like apache, mysql , openssl
+   if [ ! -f $APACHEDIR/ext/src/allBuildOk.flag ]; then
+       mkdir -p $APACHEDIR/ext/src
+       cd $APACHEDIR/ext/src
+       if [ "$BUILDEXT" == "1" ]; then
+           buildApacheMysqlOpensslLibpng
+       else
+           echo2
+           echo2 Downloading Apache/Mysql/OpenSSL/LibPNG binary build from UCSC
+           cd $APACHEDIR
+           downloadFile $BINPKGURL | tar xz
+           mkdir -p $APACHEDIR/ext/src/
+           touch $APACHEDIR/ext/src/allBuildOk.flag
+           rm -f $APACHEDIR/ext/configOk.flag 
+       fi
+
+       # directory with .pid files has to be writeable
+       chmod a+w $APACHEDIR/ext/logs
+       # directory with .socket has to be writeable
+       chmod a+w $APACHEDIR/ext
+
+       touch $APACHEDIR/ext/src/allBuildOk.flag
+
+   fi
+
+   # configure apache and mysql 
+   if [ ! -f $APACHEDIR/ext/configOk.flag ]; then
+       cd $APACHEDIR/ext
+       echo2 Creating mysql config in $APACHEDIR/ext/my.cnf
+       echo '[mysqld]' > my.cnf
+       echo "datadir = $APACHEDIR/mysqlData" >> my.cnf
+       echo "default-storage-engine = myisam" >> my.cnf
+       echo "default-tmp-storage-engine = myisam" >> my.cnf
+       echo "skip-innodb" >> my.cnf
+       echo "skip-networking" >> my.cnf
+       echo "socket = $APACHEDIR/ext/mysql.socket" >> my.cnf
+       echo '[client]' >> my.cnf
+       echo "socket = $APACHEDIR/ext/mysql.socket" >> my.cnf
+
+       # configure mysql
+       #echo2 Creating Mysql system databases
+       #mkdir -p $MYSQLDIR
+       #scripts/mysql_install_db --datadir=$MYSQLDIR
+       #SET_MYSQL_ROOT=1 # not needed with skip-networking
+       cd $APACHEDIR
+       # download minimal mysql db
+       downloadFile $MYSQLDBURL | tar xz
+       chown -R $MYSQLUSER:$MYSQLUSER $MYSQLDIR
+
+       # configure apache
+       echo2 Configuring Apache via files $APACHECONFDIR/httpd.conf and $APACHECONF
+       downloadFile $APACHECONFURL > $APACHECONF
+       # include browser config from apache config
+       echo2 Appending browser config include line to $APACHECONFDIR/httpd.conf
+       echo Include conf/001-browser.conf >> $APACHECONFDIR/httpd.conf
+       # no need for document root, note BSD specific sed option -i
+       # $SEDINPLACE 's/^DocumentRoot/#DocumentRoot/' $APACHECONFDIR/httpd.conf
+       # server root provided on command line, note BSD sed -i option
+       $SEDINPLACE 's/^ServerRoot/#ServerRoot/' $APACHECONFDIR/httpd.conf
+       # need cgi and SSI - not needed anymore, are now compiled into apache
+       # $SEDINPLACE 's/^#LoadModule include_module/LoadModule include_module/' $APACHECONFDIR/httpd.conf
+       # $SEDINPLACE 's/^#LoadModule cgid_module/LoadModule cgid_module/' $APACHECONFDIR/httpd.conf
+       # OSX has special username/group for apache
+       $SEDINPLACE 's/^User .*$/User _www/' $APACHECONFDIR/httpd.conf
+       $SEDINPLACE 's/^Group .*$/Group _www/' $APACHECONFDIR/httpd.conf
+       # OSX is for development and OSX has a built-in apache so change port to 8080
+       $SEDINPLACE 's/^Listen .*/Listen 8080/' $APACHECONFDIR/httpd.conf
+
+       # to avoid the error message upon startup that htdocs does not exist
+       mkdir -p /usr/local/apache/htdocs
+        
+       # create browserStartup.sh 
+       echo2 Creating $APACHEDIR/browserStartup.sh
+
+       downloadFile $STARTSCRIPTURL > $APACHEDIR/browserStartup.sh
+       chmod a+x $APACHEDIR/browserStartup.sh
+
+       # allowing any user to write to this directory, so any user can execute browserStartup.sh
+       chmod -R a+w $APACHEDIR/ext
+       # only mysql does not tolerate world-writable conf files
+       chmod a-w $APACHEDIR/ext/my.cnf
+
+       # development machine + mysql only reachable from localhost = empty root pwd
+       # secureMysql - not needed
+       touch $APACHEDIR/ext/configOk.flag 
+   fi
+
+   echo2 Running $APACHEDIR/browserStartup.sh to start mysql and apache
+   $APACHEDIR/browserStartup.sh
+   echo2 Waiting for mysql to start
+   sleep 5
+}
+
+# function for Debian-specific installation of mysql and apache
+function installDebian ()
+{
+    # update repos
+    if [ ! -f /tmp/browserInstall.aptGetUpdateDone ]; then
+       echo2 Running apt-get update
+       apt-get update
+       touch /tmp/browserInstall.aptGetUpdateDone
+    fi
+
+    # use dpkg to check if ghostscript is installed
+    if dpkg-query -W ghostscript 2>&1 | grep "no packages found" > /dev/null; then 
+        echo2
+        echo2 Installing ghostscript
+        waitKey
+        apt-get --assume-yes install ghostscript
+    fi
+
+    if [ ! -f $APACHECONF ]; then
+        echo2
+        echo2 Now installing Apache2.
+        echo2 "Apache's default config /etc/apache2/sites-enable/000-default will be"
+        echo2 "deactivated. A new configuration $APACHECONF will be added and activated."
+        echo2 The apache modules SSI and CGI and authz_core will be activated.
+        waitKey
+
+        # apache and mysql are absolutely required
+        # ghostscript is required for PDF output
+        apt-get --assume-yes install apache2 ghostscript
+    
+        # gmt is not required. install fails if /etc/apt/sources.list does not contain
+        # a 'universe' repository mirror. Can be safely commented out. Only used
+        # for world maps of alleles on the dbSNP page.
+        # apt-get install gmt
+        
+        # activate required apache2 modules
+        a2enmod include # we need SSI and CGIs
+        a2enmod cgid
+        a2enmod authz_core # see $APACHECONF why this is necessary
+        #a2dismod deflate # allows to partial page rendering in firefox during page load
+        
+        # download the apache config for the browser and restart apache
+        if [ ! -f $APACHECONF ]; then
+          echo2 Creating $APACHECONF
+          downloadFile $APACHECONFURL > $APACHECONF
+          a2ensite 001-browser
+          a2dissite 000-default
+          service apache2 restart
+        fi
+    fi
+
+    if [[ ! -f /usr/sbin/mysqld ]]; then
+        echo2
+        echo2 Now installing the Mysql server. 
+        echo2 The root password will be set to a random string and will be written
+        echo2 to the file /root/.my.cnf so root does not have to provide a password on
+        echo2 the command line.
+        waitKey
+        moveAwayMyCnf
+
+        # do not prompt in apt-get, will set an empty mysql root password
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get --assume-yes install mysql-server
+        # flag so script will set mysql root password later to a random value
+        SET_MYSQL_ROOT=1
+    fi
+
+}
 # download apache mysql libpng openssl into the current dir
 # and build them into $APACHEDIR/ext
 function buildApacheMysqlOpensslLibpng () 
 {
+echo2
 echo2 Now building cmake, openssl, pcre, apache and mysql into $APACHEDIR/ext
 echo2 This can take up to 20 minutes on slower machines
 waitKey
 # cmake - required by mysql
 # see http://mac-dev-env.patrickbougie.com/cmake/
+echo2 Building cmake
 curl --remote-name http://www.cmake.org/files/v3.1/cmake-3.1.3.tar.gz
 tar -xzvf cmake-3.1.3.tar.gz
 cd cmake-3.1.3
@@ -314,20 +554,23 @@ cd ..
 rm cmake-3.1.3.tar.gz
 
 # see http://mac-dev-env.patrickbougie.com/openssl/  - required for apache
+echo2 Building openssl
 curl --remote-name https://www.openssl.org/source/openssl-1.0.2a.tar.gz
 tar -xzvf openssl-1.0.2a.tar.gz
 cd openssl-1.0.2a
 ./configure darwin64-x86_64-cc --prefix=$APACHEDIR/ext
-make -j2
+# make -j2 aborted with an error
+make
 make install
 cd ..
 rm openssl-1.0.2a.tar.gz
 
 # see http://mac-dev-env.patrickbougie.com/mysql/ 
+echo2 Building mysql5.6
 curl --remote-name --location https://dev.mysql.com/get/Downloads/MySQL-5.6/mysql-5.6.23.tar.gz
 tar -xzvf mysql-5.6.23.tar.gz
 cd mysql-5.6.23
-cmake \
+../../bin/cmake \
   -DCMAKE_INSTALL_PREFIX=$APACHEDIR/ext \
   -DCMAKE_CXX_FLAGS="-stdlib=libstdc++" \
   -DMYSQL_UNIX_ADDR=$APACHEDIR/ext/mysql.socket \
@@ -342,6 +585,7 @@ rm mysql-5.6.23.tar.gz
 
 # pcre - required by apache
 # see http://mac-dev-env.patrickbougie.com/pcre/
+echo2 building pcre
 curl --remote-name ftp://ftp.csx.cam.ac.uk/pub/software/programming/pcre/pcre-8.36.tar.gz
 tar -xzvf pcre-8.36.tar.gz
 cd pcre-8.36
@@ -355,28 +599,23 @@ rm pcre-8.36.tar.gz
 # see http://mac-dev-env.patrickbougie.com/apache/
 # and http://stackoverflow.com/questions/13587001/problems-with-compiling-apache2-on-mac-os-x-mountain-lion
 # note that the -deps download of 2.4.12 does not include the APR, so we get it from the original source
-curl --remote-name http://apache.sunsite.ualberta.ca/httpd/httpd-2.4.12-deps.tar.gz
-tar -xzvf httpd-2.4.12.tar.gz
+curl http://apache.sunsite.ualberta.ca/httpd/httpd-2.4.12-deps.tar.gz | tar xz 
+curl http://apache.sunsite.ualberta.ca/httpd/httpd-2.4.12.tar.gz | tar xz 
 cd httpd-2.4.12
 
-# add APR
+# build APR
 cd srclib/
-curl http://wwwftp.ciril.fr/pub/apache/apr/apr-1.5.1.tar.gz | tar xvz
-curl http://wwwftp.ciril.fr/pub/apache/apr/apr-util-1.5.4.tar.gz | tar xvz
-mv apr-1.5.1 apr
-mv apr-util-1.5.4 apr-util
 cd apr; configure --prefix=$APACHEDIR/ext; make -j2; make install; cd ..
-cd apr-util; configure --prefix=$APACHEDIR/ext; make -j2; make install; cd ..
+cd apr-util; configure --prefix=$APACHEDIR/ext --with-apr=$APACHEDIR/ext/bin/apr-1-config; make -j2; make install; cd ..
 cd ..
 
 # now compile, compile SSL statically so there is no confusion with Apple's SSL
 # also include expat, otherwise Apple's expat conflicts
-./configure --prefix=$APACHEDIR/ext --with-included-apr --enable-ssl --with-ssl=$APACHEDIR/ext --enable-ssl-staticlib-deps  --enable-mods-static=ssl --with-expat=builtin --with-pcre=$APACHEDIR/ext/bin/pcre-config --enable-pcre=static --disable-shared
+./configure --prefix=$APACHEDIR/ext --enable-ssl --with-ssl=$APACHEDIR/ext --enable-ssl-staticlib-deps  --enable-mods-static=ssl --with-expat=builtin --with-pcre=$APACHEDIR/ext/bin/pcre-config --enable-pcre=static --disable-shared --with-apr=$APACHEDIR/ext/bin/apr-1-config --with-apr-util=$APACHEDIR/ext/bin/apu-1-config --enable-modules="all ssl cache"
 
 make -j2
 make install
 cd ..
-rm httpd-2.4.12.tar.gz
 
 # libpng - required for the genome browser
 curl --remote-name --location  'http://downloads.sourceforge.net/project/libpng/libpng16/1.6.16/libpng-1.6.16.tar.gz'
@@ -389,9 +628,176 @@ cd ..
 rm libpng-1.6.16.tar.gz
 
 }
-# --- error handler end --- 
 
-# START OF SCRIPT 
+function mysqlChangeRootPwd ()
+{
+   # first check if an old password still exists in .my.cnf
+   if [ -f ~root/.my.cnf ]; then
+       echo2 ~root/.my.cnf already exists, you might want to remove this file
+       echo2 and restart the script if an error message appears below.
+       echo2
+   fi
+
+   # generate a random char string
+   # OSX's tr is quite picky with unicode, so change LC_ALL temporarily
+   MYSQLROOTPWD=`cat /dev/urandom | LC_ALL=C tr -dc A-Z-a-z-0-9 | head -c8` || true
+   # paranoia check
+   if [[ "$MYSQLROOTPWD" == "" ]]; then
+       echo2 Error: could not generate a random Mysql root password
+       exit 111
+   fi
+
+   echo2
+   echo2 The Mysql server was installed and therefore has an empty root password.
+   echo2 Trying to set mysql root password to the randomly generated string '"'$MYSQLROOTPWD'"'
+
+   # now set the mysql root password
+   if $MYSQLADMIN -u root password $MYSQLROOTPWD; then
+       # and write it to my.cnf
+       if [ ! -f ~root/.my.cnf ]; then
+           echo2
+           echo2 Writing password to ~root/.my.cnf so root does not have to provide a password on the 
+           echo2 command line.
+           echo '[client]' >> ~root/.my.cnf
+           echo user=root >> ~root/.my.cnf
+           echo password=${MYSQLROOTPWD} >> ~root/.my.cnf
+           chmod 600 ~root/.my.cnf
+           waitKey
+        else
+           echo2 ~root/.my.cnf already exists, not changing it.
+        fi 
+   else
+       echo2 Could not connect to mysql to set the root password to $MYSQLROOTPWD.
+       echo2 A root password must have been set by a previous installation.
+       echo2 Please reset the root password to an empty password by following these
+       echo2 instructions: http://dev.mysql.com/doc/refman/5.0/en/resetting-permissions.html
+       echo2 Then restart the script.
+       echo2 Or, if you remember the old root password, write it to a file ~root/.my.cnf, 
+       echo2 create three lines
+       echo2 '[client]'
+       echo2 user=root
+       echo2 password=PASSWORD
+       echo2 run chmod 600 ~root/.my.cnf and restart this script.
+       exit 123
+   fi
+}
+
+function checkCanConnectMysql ()
+{
+if $MYSQL -e "SHOW DATABASES;" 2> /dev/null > /dev/null; then
+    true
+else
+    echo2 "ERROR:"
+    echo2 "Cannot connect to mysql database server, a root password has probably been setup before."
+    # create a little basic .my.cnf for the current root user
+    # so the mysql root password setup is easier
+    if [ ! -f ~root/.my.cnf ]; then
+       echo '[client]' >> ~root/.my.cnf
+       echo user=root >> ~root/.my.cnf
+       echo password=YOURMYSQLPASSWORD >> ~root/.my.cnf
+       chmod 600 ~root/.my.cnf
+       echo2
+       echo2 A file ${HOME}/.my.cnf was created with default values
+       echo2 Edit the file ${HOME}/.my.cnf and replace YOURMYSQLPASSWORD with the mysql root password that you
+       echo2 defined during the mysql installation.
+    else
+       echo2
+       echo2 A file ${HOME}/.my.cnf already exists
+       echo2 Edit the file ${HOME}/.my.cnf and make sure there is a '[client]' section
+       echo2 and under it at least two lines with 'user=root' and 'password=YOURMYSQLPASSWORD'.
+    fi
+       
+    echo2 "Then run this script again."
+    exit 200
+fi
+   
+# DETECT AND DEACTIVATE SELINUX
+if [ -f /sbin/selinuxenabled ]; then
+    if /sbin/selinuxenabled; then
+       echo2
+       echo2 The Genome Browser requires that SELINUX is deactivated.
+       echo2 Deactivating it now.
+       waitKey
+       # deactivate selines until next reboot
+       setenforce 0
+       # permanently deactivate after next reboot
+       sed -i 's/^SELINUX=.*/SELINUX=disabled/g' /etc/sysconfig/selinux
+    fi
+fi
+
+}
+
+# setup the mysql databases for the genome browser and grant 
+# user access rights
+function mysqlDbSetup ()
+{
+    # -------------------
+    # Mysql db setup
+    # -------------------
+    echo2
+    echo2 Creating Mysql databases customTrash, hgTemp and hgcentral
+    waitKey
+    $MYSQL -e 'CREATE DATABASE IF NOT EXISTS customTrash;'
+    $MYSQL -e 'CREATE DATABASE IF NOT EXISTS hgcentral;'
+    $MYSQL -e 'CREATE DATABASE IF NOT EXISTS hgTemp;'
+    $MYSQL -e 'CREATE DATABASE IF NOT EXISTS hgFixed;' # empty db needed for gencode tracks
+    downloadFile http://$HGDOWNLOAD/admin/hgcentral.sql | $MYSQL hgcentral
+    # the blat servers don't have fully qualified dom names in the download data
+    $MYSQL hgcentral -e 'UPDATE blatServers SET host=CONCAT(host,".cse.ucsc.edu");'
+    
+    echo2
+    echo2 "Will now grant permissions to browser database access users:"
+    echo2 "User: 'browser', password: 'genome' - full database access permissions"
+    echo2 "User: 'readonly', password: 'access' - read only access for CGI binaries"
+    echo2 "User: 'readwrite', password: 'update' - readwrite access for hgcentral DB"
+    waitKey
+    
+    #  Full access to all databases for the user 'browser'
+    #       This would be for browser developers that need read/write access
+    #       to all database tables.  
+    $MYSQL -e "GRANT SELECT, INSERT, UPDATE, DELETE, FILE, "\
+"CREATE, DROP, ALTER, CREATE TEMPORARY TABLES on *.* TO browser@localhost "\
+"IDENTIFIED BY 'genome';"
+    
+    # FILE permission for this user to all databases to allow DB table loading with
+    #       statements such as: "LOAD DATA INFILE file.tab"
+    # For security details please read:
+    #       http://dev.mysql.com/doc/refman/5.1/en/load-data.html
+    #       http://dev.mysql.com/doc/refman/5.1/en/load-data-local.html
+    $MYSQL -e "GRANT FILE on *.* TO browser@localhost IDENTIFIED BY 'genome';" 
+    
+    #   Read only access to genome databases for the browser CGI binaries
+    $MYSQL -e "GRANT SELECT, CREATE TEMPORARY TABLES on "\
+"*.* TO readonly@localhost IDENTIFIED BY 'access';"
+    $MYSQL -e "GRANT SELECT, INSERT, CREATE TEMPORARY TABLES on hgTemp.* TO "\
+"readonly@localhost IDENTIFIED BY 'access';"
+    
+    # Readwrite access to hgcentral for browser CGI binaries to keep session state
+    $MYSQL -e "GRANT SELECT, INSERT, UPDATE, "\
+"DELETE, CREATE, DROP, ALTER on hgcentral.* TO readwrite@localhost "\
+"IDENTIFIED BY 'update';"
+    
+    # create /gbdb and let the apache user write to it
+    # hgConvert will download missing liftOver files on the fly and needs write
+    # write access
+    mkdir -p $GBDBDIR
+    chown $APACHEUSER:$APACHEUSER $GBDBDIR
+    
+    # the custom track database needs it own user and permissions
+    $MYSQL -e "GRANT SELECT,INSERT,UPDATE,DELETE,CREATE,DROP,ALTER,INDEX "\
+"on customTrash.* TO ctdbuser@localhost IDENTIFIED by 'ctdbpassword';"
+    
+    # by default hgGateway needs an empty hg19 database, will crash otherwise
+    $MYSQL -e 'CREATE DATABASE IF NOT EXISTS hg19'
+    # mm9 needs an empty hg18 database
+    $MYSQL -e 'CREATE DATABASE IF NOT EXISTS hg18'
+    
+    $MYSQL -e "FLUSH PRIVILEGES;"
+    
+}
+# --- end of functions --- 
+
+# -- START OF SCRIPT  --- MAIN ---
 
 if [[ "$EUID" != "0" ]]; then
   echo "This script must be run as root or with sudo like this:"
@@ -408,37 +814,50 @@ trap errorHandler ERR
 
 # OPTION PARSING
 
-while getopts ":bauehof" opt; do
+while getopts ":baut:hof" opt; do
   case $opt in
     h)
-      echo $0 '[options] [assemblyList] - UCSC genome browser install script'
-      echo
-      echo parameters:
-      echo   'no parameter       - setup Apache and Mysql, do not download any assembly'
-      echo   '<assemblyList>     - download Mysql + /gbdb files for a space-separated'
-      echo   '                     list of genomes'
-      echo
-      echo examples:
-      echo   bash $0             - install Genome Browser, download hg19 and mm9, switch to
-      echo                         on-the-fly mode '(see the -f option)'
-      echo   bash $0 hg19 mm9    - install Genome Browser, download hg19 and mm9, switch to
-      echo                         offline mode '(see the -o option)'
-      echo
-      echo options:
-      echo '  -a   - use alternative download server at SDSC'
-      echo '  -b   - batch mode, do not prompt for key presses'
-      echo '  -e   - when downloading hg19, download all ENCODE files. By default, only'
-      echo '         our recommended selection of best-of-ENCODE files is downloaded.'
-      echo '  -u   - use UDR (fast UDP) file transfers for the download.'
-      echo '         Requires at least one open UDP incoming port 9000-9100.'
-      echo '  -o   - offline-mode. Remove all statements from hg.conf that allow loading'
-      echo '         data on-the-fly from the UCSC download server. Requires that you have'
-      echo '         downloaded at least one assembly. Default if at least one assembly has'
-      echo '         been specified.'
-      echo '  -f   - on-the-fly mode. Change hg.conf to allow loading data through the'
-      echo '         internet, if it is not available locally. The default mode unless an'
-      echo '         assembly has been provided during install'
-      echo '  -h   - this help message'
+      cat <<EOF
+$0 [options] [assemblyList] - UCSC genome browser install script
+
+parameters:
+  no parameter       - setup Apache and Mysql, do not download any assembly
+  <assemblyList>     - download Mysql + /gbdb files for a space-separated
+                       list of genomes
+
+examples:
+  bash $0             - install Genome Browser, do not download any genome
+                        assembly switch to on-the-fly mode (see the -f option)
+  bash $0 hg19 mm9    - install Genome Browser, download hg19 and mm9, switch
+                        to offline mode (see the -o option)
+  bash $0 -t noEncode hg19  - install Genome Browser, download hg19 but no
+                              ENCODE tables switch to offline mode (see the -o
+                              option)
+
+All options have to precede the list of genome assemblies.
+
+options:
+  -a   - use alternative download server at SDSC
+  -b   - batch mode, do not prompt for key presses
+  -t   - download track selection, requires a value.
+         Download only certain tracks, possible values:
+         noEncode = do not download any tables with the wgEncode prefix, 
+                    except Gencode genes, saves 4TB/6TB for hg19
+         bestEncode = our ENCODE recommendation, all summary tracks, saves
+                      2TB/6TB for hg19
+         minimal = only RefSeq/Gencode genes and SNPs, 5GB for hg19
+  -u   - use UDR (fast UDP) file transfers for the download.
+         Requires at least one open UDP incoming port 9000-9100.
+         (UDR is not available for Mac OSX)
+  -o   - switch to offline-mode. Remove all statements from hg.conf that allow
+         loading data on-the-fly from the UCSC download server. Requires that
+         you have downloaded at least one assembly. Default if at least one
+         assembly has been specified.
+  -f   - switch to on-the-fly mode. Change hg.conf to allow loading data
+         through the internet, if it is not available locally. The default mode
+         unless an assembly has been provided during install
+  -h   - this help message
+EOF
       exit 0
       ;;
     b)
@@ -449,8 +868,22 @@ while getopts ":bauehof" opt; do
     a)
       HGDOWNLOAD=hgdownload-sd.sdsc.edu
       ;;
-    e)
-      RSYNCOPTS=""
+    t)
+      val=${OPTARG}
+      if [[ "$val" == "bestEncode" ]]; then
+          RSYNCOPTS="-m --include=wgEncodeGencode* --include=wgEncodeBroadHistone* --include=wgEncodeReg* --include=wgEncodeAwg* --include=wgEncode*Mapability* --include=*/ --exclude=wgEncode*"
+          ONLYGENOMES=0
+      elif [[ "$val" == "noEncode" ]]; then
+          RSYNCOPTS="-m --include=wgEncodeGencode* --include */ --exclude=wgEncode*"
+          ONLYGENOMES=0
+      elif [[ "$val" == "minimal" ]]; then
+          # gbCdnaInfo
+          RSYNCOPTS="-m --include=grp.* --include=gold.* --include=chromInfo.* --include=trackDb* --include=hgFindSpec.* --include=gap.* --include=*.2bit --include=html/description.html --include=refGene* --include=refLink.* --include=wgEncodeGencode*V19* --include snp142Common.* --include rmsk* --include */ --exclude=*"
+          ONLYGENOMES=1 # do not download hgFixed,go,proteome etc
+      else
+          echo "Unrecognized -t value. Please read the help message, by running bash $0 -h"
+          exit 1
+      fi
       ;;
     u)
       RSYNC="/usr/local/bin/udr rsync"
@@ -504,11 +937,12 @@ elif [[ "$unameStr" == Darwin* ]]; then
     VER=`sw_vers -productVersion`
     APACHECONFDIR=$APACHEDIR/ext/conf # only used by the OSX-spec part
     APACHECONF=$APACHECONFDIR/001-browser.conf
-    APACHEUSER=_www
+    APACHEUSER=_www # predefined by Apple
     MYSQLDIR=$APACHEDIR/mysqlData
-    MYSQLUSER=_mysql
-    MYSQL="mysql --socket=$APACHEDIR/ext/mysql.socket"
-    MYSQLADMIN="$APACHEDIR/ext/mysqladmin --socket=$APACHEDIR/ext/mysql.socket"
+    MYSQLUSER=_mysql # predefined by Apple
+    MYSQL="$APACHEDIR/ext/bin/mysql --socket=$APACHEDIR/ext/mysql.socket"
+    MYSQLADMIN="$APACHEDIR/ext/bin/mysqladmin --socket=$APACHEDIR/ext/mysql.socket"
+    SEDINPLACE="sed -Ei .bak" # difference BSD vs Linux
 
 elif [[ $unameStr == Linux* ]] ; then
     OS=linux
@@ -577,239 +1011,23 @@ if [ ! -f $COMPLETEFLAG ]; then
     waitKey
 fi
 
-# -----  OSX - SPECIFIC part -----
-if [[ "$DIST" == "OSX" ]]; then
-   # check for xcode
-   if [ -f /usr/bin/xcode-select ]; then
-       echo2 Found XCode
-   else
-       echo2
-       echo2 'This installer has to compile the UCSC tools locally on OSX.'
-       echo2 'Please install XCode from https://developer.apple.com/xcode/downloads/'
-       echo2 'Start XCode once and accept the Apple license.'
-       echo2 'Then run this script again.'
-       exit 101
-   fi
-
-   # make sure that the xcode command line tools are installed
-   echo2 Checking/Installing Xcode Command line tools
-   xcode-select --install 2> /dev/null 
-
-   # in case that it is running, try to stop Apple's personal web server, we need access to port 80
-   # ignore any error messages
-   #if [ -f /usr/sbin/apachectl ]; then
-       #echo2 Stopping the Apple Personal Web Server
-       #/usr/sbin/apachectl stop 2> /dev/null || true
-       #launchctl unload -w /System/Library/LaunchDaemons/org.apache.httpd.plist 2> /dev/null || true
-   #fi
-
-   # build all external software like apache, mysql from source tarballs
-   if [ ! -f $APACHEDIR/ext/src/allBuildOk.flag ]; then
-       mkdir -p $APACHEDIR/ext/src
-       cd $APACHEDIR/ext/src
-       buildApacheMysqlOpensslLibpng
-       touch $APACHEDIR/ext/src/allBuildOk.flag
-   fi
-
-   if [ ! -f $APACHEDIR/ext/configOk.flag ]; then
-       cd $APACHEDIR/ext
-       echo2 Creating mysql config in $APACHEDIR/ext/my.cnf
-       echo '[mysqld]' > my.cnf
-       echo "datadir = $APACHEDIR/mysqlData" >> my.cnf
-       echo "default-storage-engine = myisam" >> my.cnf
-       echo "default-tmp-storage-engine = myisam" >> my.cnf
-       echo "skip-innodb" >> my.cnf
-       echo "skip-networking" >> my.cnf
-       echo "socket = $APACHEDIR/ext/mysql.socket" >> my.cnf
-       echo '[client]' >> my.cnf
-       echo "socket = $APACHEDIR/ext/mysql.socket" >> my.cnf
-
-       # configure mysql
-       echo2 Creating Mysql system databases
-       mkdir $MYSQLDIR
-       chown -R $MYSQLUSER:$MYSQLUSER $MYSQLDIR
-       scripts/mysql_install_db --datadir=$MYSQLDIR
-       secureMysql
-       #SET_MYSQL_ROOT=1 # not needed with skip-networking
-
-       # configure apache
-       echo2 Configuring Apache via files $APACHECONFDIR/httpd.conf and $APACHECONF
-       downloadFile $APACHECONFURL > $APACHECONF
-       # include browser config from main apache config
-       echo2 Appending browser config include line to $APACHECONFDIR/httpd.conf
-       echo2 Include conf/001-browser.conf >> $APACHECONFDIR/httpd.conf
-       # no need for document root, note BSD specific sed option -i
-       sed -i bak 's/^DocumentRoot/#DocumentRoot/' $APACHECONFDIR/httpd.conf
-       # server root provided on command line, note BSD sed -i option
-       sed -i bak 's/^ServerRoot/#ServerRoot/' $APACHECONFDIR/httpd.conf
-       # need cgi and SSI
-       sed -i bak 's/^#LoadModule include_module/LoadModule include_module/' $APACHECONFDIR/httpd.conf
-       sed -i bak 's/^#LoadModule cgid_module/LoadModule cgid_module/' $APACHECONFDIR/httpd.conf
-       # OSX has special username/group for apache
-       sed -i bak 's/^User .*$/User _www/' $APACHECONFDIR/httpd.conf
-       sed -i bak 's/^Group .*$/Group _www/' $APACHECONFDIR/httpd.conf
-       # OSX is for development and OSX has a built-in apache so change port to 8080
-       sed -i bak 's/^Listen .*/Listen 8080/' $APACHECONFDIR/httpd.conf
-
-      # to avoid the error message upon startup that htdocs does not exist
-      mkdir -p /usr/local/apache/htdocs
-       
-       # create browserStartup.sh 
-       if [ ! -f $APACHEDIR/browserStartup.sh ]; then
-           echo2 Creating $APACHEDIR/browserStartup.sh
-           echo '#!/bin/bash' > $APACHEDIR/browserStartup.sh
-           echo "cd $APACHEDIR/ext" > $APACHEDIR/browserStartup.sh
-           echo 'if [ -f logs/mysql.pid ]; then' >> $APACHEDIR/browserStartup.sh
-           echo '   kill `cat logs/mysql.pid`' >> $APACHEDIR/browserStartup.sh
-           echo 'fi' >> $APACHEDIR/browserStartup.sh
-           echo 'bin/mysqld_safe --defaults-file=my.cnf --user=_mysql --pid-file=logs/mysql.pid' >> $APACHEDIR/browserStartup.sh
-           echo 'if [ -f logs/httpd.pid ]; then' >> $APACHEDIR/browserStartup.sh
-           echo '   kill `cat logs/httpd.pid`' >> $APACHEDIR/browserStartup.sh
-           echo 'fi' >> $APACHEDIR/browserStartup.sh
-           echo 'bin/httpd -d `pwd`' >> $APACHEDIR/browserStartup.sh
-           echo "echo mysql and apache started, base directory $APACHEDIR" >> $APACHEDIR/browserStartup.sh
-           chmod a+x $APACHEDIR/browserStartup.sh
-       fi
-
-       # allowing any user to write to this directory, so any user can execute browserStartup.sh
-       chmod -R a+w $APACHEDIR/ext
-       # mysql does not tolerate world-writable conf files
-       chmod a-w $APACHEDIR/ext/my.cnf
-
-       touch $APACHEDIR/ext/configOk.flag 
-   fi
-
-   echo2 Running $APACHEDIR/browserStartup.sh to start mysql and apache
-   $APACHEDIR/browserStartup.sh
-   echo2 Waiting for mysql to start
-   sleep 5
-
-# -----  DEBIAN / UBUNTU - SPECIFIC part
-elif [[ "$DIST" == "debian" ]]; then
-    # update repos
-    if [ ! -f /tmp/browserInstall.aptGetUpdateDone ]; then
-       echo2 Running apt-get update
-       apt-get update
-       touch /tmp/browserInstall.aptGetUpdateDone
-    fi
-
-    # use dpkg to check if ghostscript is installed
-    if dpkg-query -W ghostscript 2>&1 | grep "no packages found" > /dev/null; then 
-        echo2
-        echo2 Installing ghostscript
-        waitKey
-        apt-get --assume-yes install ghostscript
-    fi
-
-    if [ ! -f $APACHECONF ]; then
-        echo2
-        echo2 Now installing Apache2.
-        echo2 "Apache's default config /etc/apache2/sites-enable/000-default will be"
-        echo2 "deactivated. A new configuration $APACHECONF will be added and activated."
-        echo2 The apache modules SSI and CGI and authz_core will be activated.
-        waitKey
-
-        # apache and mysql are absolutely required
-        # ghostscript is required for PDF output
-        apt-get --assume-yes install apache2 ghostscript
-    
-        # gmt is not required. install fails if /etc/apt/sources.list does not contain
-        # a 'universe' repository mirror. Can be safely commented out. Only used
-        # for world maps of alleles on the dbSNP page.
-        # apt-get install gmt
-        
-        # activate required apache2 modules
-        a2enmod include # we need SSI and CGIs
-        a2enmod cgid
-        a2enmod authz_core # see $APACHECONF why this is necessary
-        #a2dismod deflate # allows to partial page rendering in firefox during page load
-        
-        # download the apache config for the browser and restart apache
-        if [ ! -f $APACHECONF ]; then
-          echo2 Creating $APACHECONF
-          downloadFile $APACHECONFURL > $APACHECONF
-          a2ensite 001-browser
-          a2dissite 000-default
-          service apache2 restart
-        fi
-    fi
-
-    if [[ ! -f /usr/sbin/mysqld ]]; then
-        echo2
-        echo2 Now installing the Mysql server. 
-        echo2 The root password will be set to a random string and will be written
-        echo2 to the file /root/.my.cnf so root does not have to provide a password on
-        echo2 the command line.
-        waitKey
-        moveAwayMyCnf
-
-        # do not prompt in apt-get, will set an empty mysql root password
-        export DEBIAN_FRONTEND=noninteractive
-        apt-get --assume-yes install mysql-server
-        # flag so script will set mysql root password later to a random value
-        SET_MYSQL_ROOT=1
-    fi
-
-# ----- END OF DEBIAN SPECIFIC PART
-
-# ----- REDHAT / FEDORA / CENTOS specific part
-elif [[ "$DIST" == "redhat" ]]; then
-    if [ ! -f $COMPLETEFLAG ]; then
+# -----  OS - SPECIFIC part -----
+if [ ! -f $COMPLETEFLAG ]; then
+   if [[ "$DIST" == "OSX" ]]; then
+      installOsx
+   elif [[ "$DIST" == "debian" ]]; then
+      installDebian
+   elif [[ "$DIST" == "redhat" ]]; then
       installRedhat
-    fi
+   fi
 fi
+# OS-specific mysql/apache installers can SET_MYSQL_ROOT to 1 to request that the root
+# mysql user password be changed
+
+# ---- END OS-SPECIFIC part -----
 
 if [[ "${SET_MYSQL_ROOT}" == "1" ]]; then
-   # first check if an old password still exists in .my.cnf
-   if [ -f ~root/.my.cnf ]; then
-       echo2 ~root/.my.cnf already exists, you might want to remove this file
-       echo2 and restart the script if an error message appears below.
-       echo2
-   fi
-
-   # generate a random char string
-   # OSX's tr is quite picky with unicode, so change LC_ALL temporarily
-   MYSQLROOTPWD=`cat /dev/urandom | LC_ALL=C tr -dc A-Z-a-z-0-9 | head -c8` || true
-   # paranoia check
-   if [[ "$MYSQLROOTPWD" == "" ]]; then
-       echo2 Error: could not generate a random Mysql root password
-       exit 111
-   fi
-
-   echo2
-   echo2 The Mysql server was installed and therefore has an empty root password.
-   echo2 Trying to set mysql root password to the randomly generated string '"'$MYSQLROOTPWD'"'
-
-   # now set the mysql root password
-   if $MYSQLADMIN -u root password $MYSQLROOTPWD; then
-       # and write it to my.cnf
-       if [ ! -f ~root/.my.cnf ]; then
-           echo2
-           echo2 Writing password to ~root/.my.cnf so root does not have to provide a password on the 
-           echo2 command line.
-           echo '[client]' >> ~root/.my.cnf
-           echo user=root >> ~root/.my.cnf
-           echo password=${MYSQLROOTPWD} >> ~root/.my.cnf
-           chmod 600 ~root/.my.cnf
-           waitKey
-        else
-           echo2 ~root/.my.cnf already exists, not changing it.
-        fi 
-   else
-       echo2 Could not connect to mysql to set the root password to $MYSQLROOTPWD.
-       echo2 A root password must have been set by a previous installation.
-       echo2 Please reset the root password to an empty password by following these
-       echo2 instructions: http://dev.mysql.com/doc/refman/5.0/en/resetting-permissions.html
-       echo2 Then restart the script.
-       echo2 Or, if you remember the old root password, write it to a file ~root/.my.cnf, 
-       echo2 create three lines
-       echo2 '[client]'
-       echo2 user=root
-       echo2 password=PASSWORD
-       echo2 run chmod 600 ~root/.my.cnf and restart this script.
-       exit 123
-   fi
-
+   mysqlChangeRootPwd
 fi
 
 # before we do anything else with mysql
@@ -817,46 +1035,7 @@ fi
 # so test if we can connect to the mysql server
 # need to temporarily deactivate error abort mode, in case mysql cannot connect
 
-if mysql -e "SHOW DATABASES;" 2> /dev/null > /dev/null; then
-    true
-else
-    echo2 "ERROR:"
-    echo2 "Cannot connect to mysql database server, a root password has probably been setup before."
-    # create a little basic .my.cnf for the current root user
-    # so the mysql root password setup is easier
-    if [ ! -f ~root/.my.cnf ]; then
-       echo '[client]' >> ~root/.my.cnf
-       echo user=root >> ~root/.my.cnf
-       echo password=YOURMYSQLPASSWORD >> ~root/.my.cnf
-       chmod 600 ~root/.my.cnf
-       echo2
-       echo2 A file ${HOME}/.my.cnf was created with default values
-       echo2 Edit the file ${HOME}/.my.cnf and replace YOURMYSQLPASSWORD with the mysql root password that you
-       echo2 defined during the mysql installation.
-    else
-       echo2
-       echo2 A file ${HOME}/.my.cnf already exists
-       echo2 Edit the file ${HOME}/.my.cnf and make sure there is a '[client]' section
-       echo2 and under it at least two lines with 'user=root' and 'password=YOURMYSQLPASSWORD'.
-    fi
-       
-    echo2 "Then run this script again."
-    exit 200
-fi
-   
-# DETECT AND DEACTIVATE SELINUX
-if [ -f /sbin/selinuxenabled ]; then
-    if /sbin/selinuxenabled; then
-       echo2
-       echo2 The Genome Browser requires that SELINUX is deactivated.
-       echo2 Deactivating it now.
-       waitKey
-       # deactivate selines until next reboot
-       setenforce 0
-       # permanently deactivate after next reboot
-       sed -i 's/^SELINUX=.*/SELINUX=disabled/g' /etc/sysconfig/selinux
-    fi
-fi
+checkCanConnectMysql
 
 # Download over own statically compiled udr binary
 if [[ ! -f /usr/local/bin/udr && "$RSYNC" = *udr* ]]; then
@@ -871,12 +1050,12 @@ fi
 if [ ! -f $COMPLETEFLAG ]; then
     # test if an apache file is already present
     if [ -f "$APACHEDIR" ]; then
-        echo2 error: please remove the file $APACHEDIR, then restart the script with "$0 download".
+        echo2 error: please remove the file $APACHEDIR, then restart the script with "bash $0".
         exit 249
     fi
 
     # check if /usr/local/apache is empty
-    # on OSX, we had to create htdocs, so skip this check there
+    # on OSX, we had to create an empty htdocs, so skip this check there
     if [ -d "$APACHEDIR" -a "$OS" != "OSX" ]; then
         echo2 error: the directory $APACHEDIR already exists.
         echo2 This installer has to overwrite it, so please move it to a different name
@@ -884,71 +1063,13 @@ if [ ! -f $COMPLETEFLAG ]; then
         exit 250
     fi
 
-    # -------------------
-    # Mysql setup
-    # -------------------
-    echo2
-    echo2 Creating Mysql databases customTrash, hgTemp and hgcentral
-    waitKey
-    $MYSQL -e 'CREATE DATABASE IF NOT EXISTS customTrash;'
-    $MYSQL -e 'CREATE DATABASE IF NOT EXISTS hgcentral;'
-    $MYSQL -e 'CREATE DATABASE IF NOT EXISTS hgTemp;'
-    downloadFile http://$HGDOWNLOAD/admin/hgcentral.sql | mysql hgcentral
-    # the blat servers don't have fully qualified domain names in the download data
-    $MYSQL hgcentral -e 'UPDATE blatServers SET host=CONCAT(host,".cse.ucsc.edu");'
-    
-    echo2
-    echo2 "Will now grant permissions to browser database access users:"
-    echo2 "User: 'browser', password: 'genome' - full database access permissions"
-    echo2 "User: 'readonly', password: 'access' - read only access for CGI binaries"
-    echo2 "User: 'readwrite', password: 'update' - readwrite access for hgcentral DB"
-    waitKey
-    
-    #  Full access to all databases for the user 'browser'
-    #       This would be for browser developers that need read/write access
-    #       to all database tables.  
-    $MYSQL -e "GRANT SELECT, INSERT, UPDATE, DELETE, FILE, "\
-"CREATE, DROP, ALTER, CREATE TEMPORARY TABLES on *.* TO browser@localhost "\
-"IDENTIFIED BY 'genome';"
-    
-    # FILE permission for this user to all databases to allow DB table loading with
-    #       statements such as: "LOAD DATA INFILE file.tab"
-    # For security details please read:
-    #       http://dev.mysql.com/doc/refman/5.1/en/load-data.html
-    #       http://dev.mysql.com/doc/refman/5.1/en/load-data-local.html
-    $MYSQL -e "GRANT FILE on *.* TO browser@localhost IDENTIFIED BY 'genome';" 
-    
-    #   Read only access to genome databases for the browser CGI binaries
-    $MYSQL -e "GRANT SELECT, CREATE TEMPORARY TABLES on "\
-"*.* TO readonly@localhost IDENTIFIED BY 'access';"
-    $MYSQL -e "GRANT SELECT, INSERT, CREATE TEMPORARY TABLES on hgTemp.* TO "\
-"readonly@localhost IDENTIFIED BY 'access';"
-    
-    # Readwrite access to hgcentral for browser CGI binaries to maintain session state
-    $MYSQL -e "GRANT SELECT, INSERT, UPDATE, "\
-"DELETE, CREATE, DROP, ALTER on hgcentral.* TO readwrite@localhost "\
-"IDENTIFIED BY 'update';"
-    
-    # create /gbdb and let the apache user write to it
-    # hgConvert will download missing liftOver files on the fly and needs write
-    # write access
-    mkdir -p $GBDBDIR
-    chown $APACHEUSER:$APACHEUSER $GBDBDIR
-    
-    # the custom track database needs it own user and permissions
-    $MYSQL -e "GRANT SELECT,INSERT,UPDATE,DELETE,CREATE,DROP,ALTER,INDEX "\
-"on customTrash.* TO ctdbuser@localhost IDENTIFIED by 'ctdbpassword';"
-    
-    # by default hgGateway needs an empty hg19 database, will crash otherwise
-    $MYSQL -e 'CREATE DATABASE IF NOT EXISTS hg19'
-    
-    $MYSQL -e "FLUSH PRIVILEGES;"
-    
+    mysqlDbSetup
+
     # -------------------
     # CGI installation
     # -------------------
     echo2
-    echo2 Now creating /usr/local/apache and downloading contents from UCSC
+    echo2 Creating $APACHEDIR/cgi-bin and $APACHEDIR/htdocs and downloading contents from UCSC
     waitKey
     
     # create apache directories: HTML files, CGIs, temporary and custom track files
@@ -959,21 +1080,26 @@ if [ ! -f $COMPLETEFLAG ]; then
     ln -fs ../trash
     
     # download the sample hg.conf into the cgi-bin directory
+    echo2 Downloading Genome Browser config file $APACHEDIR/cgi-bin/hg.conf
     downloadFile $HGCONFURL > $APACHEDIR/cgi-bin/hg.conf
     
+    # hg.conf tweaks
     # redhat distros have the same default socket location set in mysql as
     # in our binaries. To allow mysql to connect, we have to remove the socket path.
     # Also change the psxy path to the correct path for redhat, /usr/bin/
     if [ "$DIST" == "redhat" ]; then
+       echo2 Adapting mysql socket locations in $APACHEDIR/cgi-bin/hg.conf
        sed -i "/socket=/s/^/#/" $APACHEDIR/cgi-bin/hg.conf
        sed -i "/^hgc\./s/.usr.lib.gmt.bin/\/usr\/bin/" $APACHEDIR/cgi-bin/hg.conf
     elif [ "$DIST" == "OSX" ]; then
-       # in OSX also no need to specify sockets
+       # in OSX adapt the sockets
        # note that the sed -i syntax is different from linux
+       echo2 Adapting mysql socket locations in $APACHEDIR/cgi-bin/hg.conf
        sockFile=$APACHEDIR/ext/mysql.socket
-       sed -Ei bak "s|^#?socket=.*|socket=$sockFile|" $APACHEDIR/cgi-bin/hg.conf
-       sed -Ei bak "s|^#?customTracks.socket.*|customTracks.socket=$sockFile|" $APACHEDIR/cgi-bin/hg.conf
-       sed -Ei bak "s|^#?db.socket.*|db.socket=$sockFile|" $APACHEDIR/cgi-bin/hg.conf
+       $SEDINPLACE "s|^#?socket=.*|socket=$sockFile|" $APACHEDIR/cgi-bin/hg.conf
+       $SEDINPLACE "s|^#?customTracks.socket.*|customTracks.socket=$sockFile|" $APACHEDIR/cgi-bin/hg.conf
+       $SEDINPLACE "s|^#?db.socket.*|db.socket=$sockFile|" $APACHEDIR/cgi-bin/hg.conf
+       $SEDINPLACE "s|^#?central.socket.*|central.socket=$sockFile|" $APACHEDIR/cgi-bin/hg.conf
     fi
     
     # download the CGIs
@@ -990,10 +1116,11 @@ if [ ! -f $COMPLETEFLAG ]; then
     
     # assign all files just downloaded to a valid user. 
     # This also allows apache to write into the trash dir
-    chown -R $APACHEUSER:$APACHEUSER $APACHEDIR/*
+    chown -R $APACHEUSER:$APACHEUSER $APACHEDIR/cgi-bin $APACHEDIR/htdocs $APACHEDIR/trash
     
     touch $COMPLETEFLAG
 
+    # if there is not genome to download, stop here
     if [ "${1:-}" == "" ]; then
        echo2
        echo2 Install complete. You should now be able to point your web browser to this machine
@@ -1010,7 +1137,7 @@ if [ ! -f $COMPLETEFLAG ]; then
        echo2 
        echo2 The address to access this installation is either http://127.0.0.1 or 
        # http://unix.stackexchange.com/questions/22615/how-can-i-get-my-external-ip-address-in-bash
-       echo2 http://`downloadFile http://icanhazip.com`
+       echo2 http://`downloadFileQuiet http://icanhazip.com`
        echo2 
        exit 0
     fi
@@ -1041,8 +1168,16 @@ echo2 Downloading databases $DBS plus hgFixed/proteome/go from the UCSC download
 echo2
 echo2 Determining download file size... please wait...
 
+if [ "ONLYGENOMES" == "0" ]; then
+    MYSQLDBS="$DBS proteome uniProt go hgFixed"
+else
+    MYSQLDBS="$DBS"
+fi
+
+# rsync is doing globbing itself, so switch it off temporarily
+set -f
 # use rsync to get total size of files in directories and sum the numbers up with awk
-for db in $DBS proteome uniProt go hgFixed; do
+for db in $MYSQLDBS; do
     rsync -avn $HGDOWNLOAD::mysql/$db/ $MYSQLDIR/$db/ $RSYNCOPTS | grep ^'total size' | cut -d' ' -f4 | tr -d ', ' 
 done | awk '{ sum += $1 } END { print "| Required space in '$MYSQLDIR':", sum/1000000000, "GB" }'
 
@@ -1064,24 +1199,26 @@ echo2 symlink $GBDBDIR and $MYSQLDIR to the new locations. You might have to sto
 echo2 Mysql temporarily to do this.
 echo2
 echo2 You can interrupt this script with CTRL-C now, add more space and rerun the 
-echo2 script later.
+echo2 script later with the same parameters.
 echo2
 waitKey
 
 # now do the actual download of mysql files
-for db in $DBS proteome uniProt go hgFixed; do
-   echo2 Downloading Mysql files for DB $db
+for db in $MYSQLDBS; do
+   echo2 Downloading Mysql files for mysql database $db
    $RSYNC --progress -avzp $RSYNCOPTS $HGDOWNLOAD::mysql/$db/ $MYSQLDIR/$db/ 
    chown -R $MYSQLUSER:$MYSQLUSER $MYSQLDIR/$db
 done
 
 # download /gbdb files
 for db in $DBS; do
-   echo2 Downloading $GBDBDIR files for DB $db
+   echo2 Downloading $GBDBDIR files for assembly $db
    mkdir -p $GBDBDIR
    $RSYNC --progress -avzp $RSYNCOPTS $HGDOWNLOAD::gbdb/$db/ $GBDBDIR/$db/
    chown -R $APACHEUSER:$APACHEUSER $GBDBDIR/$db
 done
+
+set +f
 
 goOffline # modify hg.conf and remove all statements that use the UCSC download server
 
@@ -1089,9 +1226,15 @@ echo2
 echo2 Install complete. You should now be able to point your web browser to this machine
 echo2 and use your UCSC Genome Browser mirror.
 echo2
-echo2 The address to access this installation is either http://127.0.0.1 or 
-# http://unix.stackexchange.com/questions/22615/how-can-i-get-my-external-ip-address-in-bash
-echo2 http://`downloadFile http://icanhazip.com`
+
+if [[ "$DIST" == "OSX" ]]; then
+   echo2 You can browser the genome now at http://127.0.0.1:8080
+   /usr/bin/open http://127.0.0.1:8080
+else
+   echo2 The address to access this installation is either http://127.0.0.1 or 
+   # http://unix.stackexchange.com/questions/22615/how-can-i-get-my-external-ip-address-in-bash
+   echo2 http://`downloadFileQuiet http://icanhazip.com quiet`
+fi
 echo2 
 echo2 Note that this installation assumes that emails cannot be sent from
 echo2 this machine. New browser user accounts will not receive confirmation emails.
