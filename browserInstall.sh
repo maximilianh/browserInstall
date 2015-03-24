@@ -183,7 +183,7 @@ function showMyAddress ()
 echo2
 if [[ "$DIST" == "OSX" ]]; then
    echo2 You can browse the genome at http://127.0.0.1:8080
-   /usr/bin/open http://127.0.0.1:8080
+   #/usr/bin/open http://127.0.0.1:8080
 else
    echo2 You can now access this server under one of these IP addresses: 
    echo2 From same host:    http://127.0.0.1
