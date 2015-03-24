@@ -7,13 +7,25 @@ set -e
 APACHEDIR=/usr/local/apache
 BASEDIR=$APACHEDIR/ext
 
+MYSQLPID=$BASEDIR/logs/mysql.pid
+
 # try to kill and start mysql
 if [ -f $BASEDIR/logs/mysql.pid ]; then
    kill `cat $BASEDIR/logs/mysql.pid` || true
    sleep 3
 fi
 if [ -f $BASEDIR/bin/mysqld_safe ]; then
-    $BASEDIR/bin/mysqld_safe --defaults-file=$BASEDIR/my.cnf --user=_mysql --pid-file=$BASEDIR/logs/mysql.pid &
+    $BASEDIR/bin/mysqld_safe --defaults-file=$BASEDIR/my.cnf --user=_mysql --pid-file=$MYSQLPID &
+fi
+
+sleep 2
+
+if [ ! -f $MYSQLPID ]; then
+    echo File $MYSQLPID does not exist after mysql startup.
+    echo Apparently Mysql is unable to start.
+    echo The error log file location was output to the screen by myqld above.
+    echo Some ideas on the reasons might be available in $BASEDIR/my.cnf or the mysql error log file
+    exit 250
 fi
 
 # try to kill and start apache
