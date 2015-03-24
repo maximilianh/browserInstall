@@ -177,6 +177,21 @@ if [ -f ~root/.my.cnf ]; then
 fi
 }
 
+# print my various IP addresses to stdout 
+function showMyAddress ()
+{
+echo2
+if [[ "$DIST" == "OSX" ]]; then
+   echo2 You can browse the genome at http://127.0.0.1:8080
+   /usr/bin/open http://127.0.0.1:8080
+else
+   echo2 The address to access this installation is either http://127.0.0.1 or 
+   # http://unix.stackexchange.com/questions/22615/how-can-i-get-my-external-ip-address-in-bash
+   echo2 http://`downloadFileQuiet http://icanhazip.com quiet`
+fi
+echo2
+}
+
 # On OSX, we have to compile everything locally
 function setupCgiOsx () 
 {
@@ -1135,10 +1150,7 @@ if [ ! -f $COMPLETEFLAG ]; then
        echo2 disk. To download a genome assembly and all its files now, call this script again with
        echo2 the parameters '"<assemblyName1> <assemblyName2> ..."', e.g. '"'bash $0 mm10 hg19'"'
        echo2 
-       echo2 The address to access this installation is either http://127.0.0.1 or 
-       # http://unix.stackexchange.com/questions/22615/how-can-i-get-my-external-ip-address-in-bash
-       echo2 http://`downloadFileQuiet http://icanhazip.com`
-       echo2 
+       showMyAddress
        exit 0
     fi
     
@@ -1227,14 +1239,8 @@ echo2 Install complete. You should now be able to point your web browser to this
 echo2 and use your UCSC Genome Browser mirror.
 echo2
 
-if [[ "$DIST" == "OSX" ]]; then
-   echo2 You can browse the genome at http://127.0.0.1:8080
-   /usr/bin/open http://127.0.0.1:8080
-else
-   echo2 The address to access this installation is either http://127.0.0.1 or 
-   # http://unix.stackexchange.com/questions/22615/how-can-i-get-my-external-ip-address-in-bash
-   echo2 http://`downloadFileQuiet http://icanhazip.com quiet`
-fi
+showMyAddress
+
 echo2 
 echo2 Note that this installation assumes that emails cannot be sent from
 echo2 this machine. New browser user accounts will not receive confirmation emails.
