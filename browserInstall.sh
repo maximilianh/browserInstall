@@ -74,7 +74,6 @@ MYSQLDBURL=http://hgwdev.soe.ucsc.edu/~max/gbInstall/mysql56Data.tgz
 # mysql/apache startup script URL, currently only for OSX
 STARTSCRIPTURL=https://raw.githubusercontent.com/maximilianh/browserInstall/master/browserStartup.sh
 
-
 # ---- END GLOBAL DEFAULT SETTINGS ----
 
 # --- error handling --- 
@@ -621,8 +620,8 @@ cd httpd-2.4.12
 
 # build APR
 cd srclib/
-cd apr; configure --prefix=$APACHEDIR/ext; make -j2; make install; cd ..
-cd apr-util; configure --prefix=$APACHEDIR/ext --with-apr=$APACHEDIR/ext/bin/apr-1-config; make -j2; make install; cd ..
+cd apr; ./configure --prefix=$APACHEDIR/ext; make -j2; make install; cd ..
+cd apr-util; ./configure --prefix=$APACHEDIR/ext --with-apr=$APACHEDIR/ext/bin/apr-1-config; make -j2; make install; cd ..
 cd ..
 
 # now compile, compile SSL statically so there is no confusion with Apple's SSL
@@ -959,6 +958,9 @@ elif [[ "$unameStr" == Darwin* ]]; then
     MYSQL="$APACHEDIR/ext/bin/mysql --socket=$APACHEDIR/ext/mysql.socket"
     MYSQLADMIN="$APACHEDIR/ext/bin/mysqladmin --socket=$APACHEDIR/ext/mysql.socket"
     SEDINPLACE="sed -Ei .bak" # difference BSD vs Linux
+    # make sure resulting binaries can be run on OSX 10.7
+    # this is a gcc option, not a global variable for this script
+    export MACOSX_DEPLOYMENT_TARGET=10.7
 
 elif [[ $unameStr == Linux* ]] ; then
     OS=linux
