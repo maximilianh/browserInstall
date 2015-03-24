@@ -18,7 +18,7 @@ if [ -f $BASEDIR/bin/mysqld_safe ]; then
     $BASEDIR/bin/mysqld_safe --defaults-file=$BASEDIR/my.cnf --user=_mysql --pid-file=$MYSQLPID &
 fi
 
-sleep 2
+sleep 5
 
 if [ ! -f $MYSQLPID ]; then
     echo File $MYSQLPID does not exist after mysql startup.
