@@ -416,6 +416,10 @@ function installOsx ()
    if [ ! -f $APACHEDIR/ext/configOk.flag ]; then
        cd $APACHEDIR/ext
        echo2 Creating mysql config in $APACHEDIR/ext/my.cnf
+       # avoid any write-protection issues
+       if [ -f $APACHEDIR/ext/my.cnf ]; then
+           chmod u+w $APACHEDIR/ext/my.cnf 
+       fi
        echo '[mysqld]' > my.cnf
        echo "datadir = $APACHEDIR/mysqlData" >> my.cnf
        echo "default-storage-engine = myisam" >> my.cnf
