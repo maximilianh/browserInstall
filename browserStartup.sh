@@ -20,20 +20,20 @@ fi
 
 sleep 5
 
-if [ ! -f $MYSQLPID ]; then
-    echo File $MYSQLPID does not exist after mysql startup.
-    echo Apparently Mysql is unable to start.
-    echo The error log file location was output to the screen by myqld above.
-    echo Some ideas on the reasons might be available in $BASEDIR/my.cnf or the mysql error log file
-    exit 250
-fi
-
 # try to kill and start apache
 if [ -f "$BASEDIR/logs/httpd.pid" ]; then
    kill `cat $BASEDIR/logs/httpd.pid` || true
 fi
 if [ -f $BASEDIR/bin/httpd ]; then
    $BASEDIR/bin/httpd -d "$BASEDIR"
+fi
+
+if [ ! -f $MYSQLPID ]; then
+    echo File $MYSQLPID does not exist after mysql startup.
+    echo Apparently Mysql is unable to start.
+    echo The error log file location was output to the screen by myqld above.
+    echo Some ideas on the reasons might be available in $BASEDIR/my.cnf or the mysql error log file
+    exit 250
 fi
 
 if [[ "$1" == "-e" ]]; then
