@@ -11,7 +11,7 @@ MYSQLPID=$BASEDIR/logs/mysql.pid
 
 # try to kill and start mysql
 if [ -f $BASEDIR/logs/mysql.pid ]; then
-   kill `cat $BASEDIR/logs/mysql.pid` || true
+   kill `cat $BASEDIR/logs/mysql.pid` 2> /dev/null || true
    sleep 3
 fi
 if [ -f $BASEDIR/bin/mysqld_safe ]; then
@@ -22,7 +22,7 @@ sleep 5
 
 # try to kill and start apache
 if [ -f "$BASEDIR/logs/httpd.pid" ]; then
-   kill `cat $BASEDIR/logs/httpd.pid` || true
+   kill `cat $BASEDIR/logs/httpd.pid` 2> /dev/null || true
 fi
 if [ -f $BASEDIR/bin/httpd ]; then
    $BASEDIR/bin/httpd -d "$BASEDIR"
