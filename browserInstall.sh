@@ -66,9 +66,9 @@ BUILDEXT=${BUILDEXT:-0}
 BUILDKENT=${BUILDKENT:-0}
 
 # URL of a tarball with a the binaries of Apache/Mysql/Openssl
-BINPKGURL=http://hgwdev.soe.ucsc.edu/~max/gbInstall/mysqlApacheOSX_10_10.tgz
+BINPKGURL=http://hgwdev.soe.ucsc.edu/~max/gbInstall/mysqlApacheOSX_10.7.tgz
 # URL of tarball with the OSX CGI binaries
-CGIBINURL=http://hgwdev.soe.ucsc.edu/~max/gbInstall/kentCgi_OSX_10.10.tgz 
+CGIBINURL=http://hgwdev.soe.ucsc.edu/~max/gbInstall/kentCgi_OSX_10.7.tgz 
 # URL of tarball with a minimal Mysql data directory
 MYSQLDBURL=http://hgwdev.soe.ucsc.edu/~max/gbInstall/mysql56Data.tgz
 # mysql/apache startup script URL, currently only for OSX
