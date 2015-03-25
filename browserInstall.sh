@@ -1135,7 +1135,7 @@ if [ ! -f $COMPLETEFLAG ]; then
         
     # download the html docs, exclude some big files on OSX
     rm -rf $APACHEDIR/htdocs/goldenpath
-    if [ "$OS" == "OSX" ]]; then
+    if [ "$OS" == "OSX" ]; then
             $RSYNC --delete -azP --exclude=training --exclude=ENCODE --exclude=encode --exclude=rosenbloom.pdf --exclude=pubs*.pdf --exclude=*.{bb,bam,bai,bw,gz,2bit} --exclude=goldenpath $HGDOWNLOAD::htdocs/ $APACHEDIR/htdocs/ 
     else
             $RSYNC --delete -azP $HGDOWNLOAD::htdocs/ $APACHEDIR/htdocs/ 
