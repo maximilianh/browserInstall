@@ -507,7 +507,7 @@ function installDebian ()
         echo2 Now installing Apache2.
         echo2 "Apache's default config /etc/apache2/sites-enable/000-default will be"
         echo2 "deactivated. A new configuration $APACHECONF will be added and activated."
-        echo2 The apache modules SSI and CGI and authz_core will be activated.
+        echo2 The apache modules include, cgid and authz_core will be activated.
         waitKey
 
         # apache and mysql are absolutely required
@@ -630,7 +630,7 @@ cd ..
 
 # now compile, compile SSL statically so there is no confusion with Apple's SSL
 # also include expat, otherwise Apple's expat conflicts
-./configure --prefix=$APACHEDIR/ext --enable-ssl --with-ssl=$APACHEDIR/ext --enable-ssl-staticlib-deps  --enable-mods-static=ssl --with-expat=builtin --with-pcre=$APACHEDIR/ext/bin/pcre-config --enable-pcre=static --disable-shared --with-apr=$APACHEDIR/ext/bin/apr-1-config --with-apr-util=$APACHEDIR/ext/bin/apu-1-config --enable-modules="all ssl cache include cgid"
+./configure --prefix=$APACHEDIR/ext --enable-ssl --with-ssl=$APACHEDIR/ext --enable-ssl-staticlib-deps  --enable-mods-static=ssl --with-expat=builtin --with-pcre=$APACHEDIR/ext/bin/pcre-config --enable-pcre=static --disable-shared --with-apr=$APACHEDIR/ext/bin/apr-1-config --with-apr-util=$APACHEDIR/ext/bin/apu-1-config --enable-mods-static="ssl include cgid authn_file authn_core authz_host authz_groupfile authz_user authz_core access_compat auth_basic reqtimeout include filter mime log_config env headers setenvif version unixd status autoindex dir alias"
 
 make -j2
 make install
