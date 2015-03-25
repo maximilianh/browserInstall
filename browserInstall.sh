@@ -1133,8 +1133,13 @@ if [ ! -f $COMPLETEFLAG ]; then
         $RSYNC -avzP --exclude RNAplot $HGDOWNLOAD::cgi-bin/ $APACHEDIR/cgi-bin/
     fi
         
-    # download the html docs, exclude some big files
-    $RSYNC --delete -azP --exclude=training --exclude=ENCODE --exclude=encode --exclude=rosenbloom.pdf --exclude=pubs*.pdf --exclude=*.{bb,bam,bai,bw,gz,2bit} --exclude=goldenpath $HGDOWNLOAD::htdocs/ $APACHEDIR/htdocs/ 
+    # download the html docs, exclude some big files on OSX
+    rm -rf $APACHEDIR/htdocs/goldenpath
+    if [ "$OS" == "OSX" ]]; then
+            $RSYNC --delete -azP --exclude=training --exclude=ENCODE --exclude=encode --exclude=rosenbloom.pdf --exclude=pubs*.pdf --exclude=*.{bb,bam,bai,bw,gz,2bit} --exclude=goldenpath $HGDOWNLOAD::htdocs/ $APACHEDIR/htdocs/ 
+    else
+            $RSYNC --delete -azP $HGDOWNLOAD::htdocs/ $APACHEDIR/htdocs/ 
+    fi
     
     # assign all files just downloaded to a valid user. 
     # This also allows apache to write into the trash dir
