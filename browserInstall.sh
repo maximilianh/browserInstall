@@ -283,6 +283,9 @@ function installRedhat () {
         yum -y install httpd
         # start apache on boot
         chkconfig --level 2345 httpd on
+        # avoid the error message upon startup that htdocs does not exist
+        mkdir -p $APACHEDIR/htdocs
+        
         service httpd start
     else
         echo2 Apache already installed
@@ -460,7 +463,7 @@ function installOsx ()
        $SEDINPLACE 's/^Listen .*/Listen 8080/' $APACHECONFDIR/httpd.conf
 
        # to avoid the error message upon startup that htdocs does not exist
-       mkdir -p /usr/local/apache/htdocs
+       mkdir -p $APACHEDIR/htdocs
         
        # create browserStartup.sh 
        echo2 Creating $APACHEDIR/browserStartup.sh
