@@ -10,15 +10,22 @@ set -u -e -o pipefail # fail on unset vars and all errors, also in pipes
 
 # ---- GLOBAL DEFAULT SETTINGS ----
 
-# directory where CGI-BIN and htdocs are downloaded to
+# Directory where CGI-BIN and htdocs are downloaded to.
+# this is the main runtime directory of the genome browser. It contains
+# CGI binaries, the config file (hg.conf), temporary ("trash") files, downloaded pieces of big files
+# ("udcCache") and various other runtime data needed for the browser
 APACHEDIR=/usr/local/apache
 
-# apache config file
-APACHECONFURL=https://raw.githubusercontent.com/maximilianh/browserInstall/master/apache.conf
-# genome browser default config file
-HGCONFURL=https://raw.githubusercontent.com/maximilianh/browserInstall/master/hg.conf
+# apache document root, for html documents
+HTDOCDIR=$APACHEDIR/htdocs
+# apache CGI-bin directory
+CGIBINDIR=$APACHEDIR/cgi-bin
+# directory for temporary files
+TRASHDIR=$APACHEDIR/trash
 
 # mysql data directory 
+# for most genome annotation data
+# (all non-mysql data is stored in /gbdb)
 MYSQLDIR=/var/lib/mysql
 
 # mysql admin binary, different path on OSX
@@ -47,7 +54,7 @@ SEDINPLACE="sed -ri"
 # udr binary URL
 UDRURL=https://raw.githubusercontent.com/maximilianh/browserInstall/master/udr
 
-# rsync is a variable so it can be udr
+# rsync is a variable so it can be be set to use udr
 RSYNC=rsync
 
 # by default, everything is downloaded
@@ -75,6 +82,232 @@ MYSQLDBURL=http://hgwdev.soe.ucsc.edu/~max/gbInstall/mysql56Data.tgz
 STARTSCRIPTURL=https://raw.githubusercontent.com/maximilianh/browserInstall/master/browserStartup.sh
 
 # ---- END GLOBAL DEFAULT SETTINGS ----
+
+# ---- DEFAULT CONFIG FILES ------------------
+# We need to initialize hg.conf and apache.conf for the browser.
+# They are inline so we do not create a dependency on another file 
+# that has to be pushed to hgdownload when this script is updated
+
+# syntax from http://stackoverflow.com/questions/23929235/multi-line-string-with-extra-space
+read -r -d '' APACHE_CONFIG_STR << EOF_APACHECONF
+# get rid of the warning at apache2 startup
+ServerName genomeBrowserMirror
+
+<VirtualHost *:*>
+	ServerAdmin webmaster@localhost
+
+	DocumentRoot $HTDOCDIR
+	<Directory />
+		Options +FollowSymLinks +Includes +Indexes
+		XBitHack on
+		AllowOverride None
+		# Apache 2.2
+		<IfModule !mod_authz_core.c>
+		    Allow from all
+		    Order allow,deny
+		</IfModule>
+		# Apache 2.4
+		<IfModule mod_authz_core.c>
+		    Require all granted
+		    SSILegacyExprParser on
+		</IfModule>
+	</Directory>
+
+	ScriptAlias /cgi-bin CGIBINDIR
+	<Directory "$CGIBINDIR">
+		Options +ExecCGI -MultiViews +Includes +FollowSymLinks
+		XBitHack on
+		AllowOverride None
+		# Apache 2.2
+		<IfModule !mod_authz_core.c>
+		    Allow from all
+		    Order allow,deny
+		</IfModule>
+		# Apache 2.4
+		<IfModule mod_authz_core.c>
+		    Require all granted
+		    SSILegacyExprParser on
+		</IfModule>
+	</Directory>
+
+        # no indexes in the trash directory
+        <Directory "$TRASHDIR">
+         Options MultiViews
+         AllowOverride None
+	# Apache 2.2
+	<IfModule !mod_authz_core.c>
+	    Allow from all
+	    Order allow,deny
+	</IfModule>
+	# Apache 2.4
+	<IfModule mod_authz_core.c>
+	    Require all granted
+	</IfModule>
+       </Directory>
+
+</VirtualHost>
+EOF_APACHECONF
+
+read -r -d '' HG_CONF_STR << EOF_HGCONF
+###########################################################
+# Config file for the UCSC Human Genome server
+#
+# format is key=value, no spaces around the values or around the keys.
+#
+# For a documentation of all config options in hg.conf, see our example file at
+# https://github.com/ucscGenomeBrowser/kent/blob/master/src/product/ex.hg.conf
+# It includes many comments.
+
+# from/return email address used for system emails
+# NOEMAIL means that user accounts are not validated on this machine
+# by sending email to users who have just signed up.
+# This is set as we cannot be sure if sendmail is working from this host
+# If you know that email is working, please change this 
+login.mailReturnAddr=NOEMAIL
+
+# title of host of browser, this text be shown in the user interface of
+# the login/sign up screens
+login.browserName=UCSC Genome Browser Mirror
+# base url of browser installed
+login.browserAddr=http://127.0.0.1
+# signature written at the bottom of hgLogin system emails
+login.mailSignature=None
+
+# Credentials to access the local mysql server
+db.host=localhost
+db.user=readonly
+db.password=access
+db.socket=/var/run/mysqld/mysqld.sock
+# db.port=3306
+
+# The locations of the directory that holds file-based data
+# (e.g. alignments, database images, indexed bigBed files etc)
+# By default, this mirror can load missing files from the hgdownload server at UCSC
+# To disable on-the-fly loading of files, comment out these lines, 
+# the slow-db.* section below and the showTableCache statement.
+gbdbLoc1=/gbdb/
+gbdbLoc2=http://hgdownload.cse.ucsc.edu/gbdb/
+
+# The location of the mysql server that is used if data cannot be found locally
+# (e.g. chromosome annotations, alignment summaries, etc)
+# To disable on-the-fly loading of mysql data, comment out these lines. 
+slow-db.host=genome-mysql.cse.ucsc.edu
+slow-db.user=genomep
+slow-db.password=password
+
+# if data is loaded from UCSC with slow-db, use the 'tableList'
+# mysql table to do table field name checks instead of DESCRIBE
+showTableCache=tableList
+
+# deactivate the hgMirror CGI on this machine
+allowHgMirror=0
+
+# direct links to Encode PDF files back to the UCSC site
+# so the mirror does not need a copy of them
+hgEncodeVocabDocBaseUrl=http://genome.ucsc.edu
+
+# if you want a different default species selection on the Gateway
+# page, change this default Human to one of the genomes from the
+# defaultDb table in hgcentral:
+# hgsql -e "select genome from defaultDb;" hgcentral
+# If you need a different version of that specific genome, change
+# the defaultDb table entry, for example, a different mouse genome
+# version as default:
+# hgsql -e 'update defaultDb set name="mm8" where genome="Mouse"
+# then this defaultGenome would read: defaultGenome=Mouse
+defaultGenome=Human
+
+# trackDb table to use. A simple value of `trackDb' is normally sufficient.
+# In general, the value is a comma-separated list of trackDb format tables to
+# search.  This supports local tracks combined with a mirror of the trackDb
+# table from UCSC. The names should be in the form `trackDb_suffix'. This
+# implies a parallel hgFindSpec format search table exists in the form
+# hgFindSpec_suffix.  The specified trackDb tables are searched in the order
+# specified, with the first occurance of a track being used.  You may associate
+# trackDb/hgFindSpec tables with other instances of genome databases using a
+# specification of dbProfile:trackDbTbl, where dbProfile is the name of a
+# databases profile in hg.conf, and trackDbTbl is the name of the table in the
+# remote databases.  See below for details of dbProfile
+db.trackDb=trackDb
+#db.trackDb=trackDb_local,trackDb
+
+# similar to trackDb above, a mirror can also include local track groups
+# This specifies the table for them
+db.grp=grp
+
+# required to use hgLogin
+login.systemName=UCSC Genome Browser Mirror
+# url to server hosting hgLogin
+wiki.host=HTTPHOST
+# Arbitrary name of cookie holding user name 
+wiki.userNameCookie=gbUser
+# Arbitrary name of cookie holding user id 
+wiki.loggedInCookie=gbUserId
+
+#  Use these settings to provide host, user, and password settings
+customTracks.host=localhost
+customTracks.user=ctdbuser
+customTracks.password=ctdbpassword
+customTracks.useAll=yes
+customTracks.socket=/var/run/mysqld/mysqld.sock
+customTracks.tmpdir=$TRASHDIR/customTrash
+
+# central.host is the name of the host of the central MySQL
+# database where stuff common to all versions of the genome
+# and the user database is stored.
+central.db=hgcentral
+central.host=localhost
+central.socket=/var/run/mysqld/mysqld.sock
+
+# Be sure this user has UPDATE AND INSERT privs for hgcentral
+central.user=readwrite
+central.password=update
+
+#	The central.domain will allow the browser cookie-cart
+#	function to work.  Set it to the domain of your Apache
+#	WEB server.  For example, if your browser URL is:
+#	http://mylab.university.edu/cgi-bin/hgTracks?db=hg19
+#	set central.domain to: mylab.university.edu
+central.domain=HTTPHOST
+
+# Change this default documentRoot if different in your installation,
+# to allow some of the browser cgi binaries to find help text files
+browser.documentRoot=/usr/local/apache/htdocs
+
+#  new option for track reording functions, August 2006
+hgTracks.trackReordering=on
+
+# directory for temporary bbi file caching, default is /tmp/udcCache
+# see also: README.udc
+udc.cacheDir=$TRASHDIR/udcCache
+
+# Parallel fetching of remote network resources using bigDataUrl such
+# as trackHubs and customTracks
+# how many threads to use (set to 0 to disable)
+parallelFetch.threads=4
+# how long to wait in seconds for parallel fetch to finish
+parallelFetch.timeout=90
+
+# These settings enable geographic allele frequency images on the 
+# details pages for the HGDP Allele Frequency (hgdpGeo) track.
+# (HGDP = Human Genome Diversity Project)
+# Programs required for per-SNP geographic maps of HGDP population
+# allele frequencies:
+hgc.psxyPath=/usr/lib/gmt/bin/psxy
+hgc.ps2rasterPath=/usr/lib/gmt/bin/ps2raster
+hgc.ghostscriptPath=/usr/bin/ghostscript
+
+# legacy setting
+browser.indelOptions=on
+# sql debugging: uncomment to see all SQL commands in the apache log
+#JKSQL_TRACE=on
+#JKSQL_PROF=on
+
+EOF_HGCONF
+
+# ----------------- END OF DEFAULT INLINE CONFIG FILES --------------------------
+
+# ----------------- UTILITY FUNCTIONS --------------------------
 
 # --- error handling --- 
 # add some highlight so it's easier to distinguish our own echoing from the programs we call
@@ -283,8 +516,8 @@ function installRedhat () {
         yum -y install httpd
         # start apache on boot
         chkconfig --level 2345 httpd on
-        # avoid the error message upon startup that htdocs does not exist
-        mkdir -p $APACHEDIR/htdocs
+        # there will be an error message that the apache 
+        # mkdir -p $APACHEDIR/htdocs
         
         service httpd start
     else
@@ -296,7 +529,7 @@ function installRedhat () {
         echo2
         echo2 Creating the Apache2 config file $APACHECONF
         waitKey
-        downloadFile $APACHECONFURL > $APACHECONF
+        echo "$APACHE_CONFIG_STR" > $APACHECONF
     fi
     service httpd restart
 
@@ -445,7 +678,7 @@ function installOsx ()
 
        # configure apache
        echo2 Configuring Apache via files $APACHECONFDIR/httpd.conf and $APACHECONF
-       downloadFile $APACHECONFURL > $APACHECONF
+       echo "$APACHE_CONFIG_STR" > $APACHECONF
        # include browser config from apache config
        echo2 Appending browser config include line to $APACHECONFDIR/httpd.conf
        echo Include conf/001-browser.conf >> $APACHECONFDIR/httpd.conf
@@ -463,7 +696,7 @@ function installOsx ()
        $SEDINPLACE 's/^Listen .*/Listen 8080/' $APACHECONFDIR/httpd.conf
 
        # to avoid the error message upon startup that htdocs does not exist
-       mkdir -p $APACHEDIR/htdocs
+       # mkdir -p $APACHEDIR/htdocs
         
        # create browserStartup.sh 
        echo2 Creating $APACHEDIR/browserStartup.sh
@@ -531,7 +764,7 @@ function installDebian ()
         # download the apache config for the browser and restart apache
         if [ ! -f $APACHECONF ]; then
           echo2 Creating $APACHECONF
-          downloadFile $APACHECONFURL > $APACHECONF
+          echo "$APACHE_CONFIG_STR" > $APACHECONF
           a2ensite 001-browser
           a2dissite 000-default
           service apache2 restart
@@ -555,6 +788,7 @@ function installDebian ()
     fi
 
 }
+
 # download apache mysql libpng openssl into the current dir
 # and build them into $APACHEDIR/ext
 function buildApacheMysqlOpensslLibpng () 
@@ -648,7 +882,6 @@ make -j2
 make install
 cd ..
 rm libpng-1.6.16.tar.gz
-
 }
 
 function mysqlChangeRootPwd ()
@@ -732,21 +965,23 @@ else
     echo2 "Then run this script again."
     exit 200
 fi
+}
    
-# DETECT AND DEACTIVATE SELINUX
-if [ -f /sbin/selinuxenabled ]; then
-    if /sbin/selinuxenabled; then
+# DETECT AND DEACTIVATE SELINUX: if it exists and is active
+function disableSelinux () 
+{
+if [ hash selinuxenabled > /dev/null ]; then
+    if selinuxenabled; then
        echo2
        echo2 The Genome Browser requires that SELINUX is deactivated.
        echo2 Deactivating it now.
        waitKey
-       # deactivate selines until next reboot
+       # deactivate selinux until next reboot
        setenforce 0
        # permanently deactivate after next reboot
        sed -i 's/^SELINUX=.*/SELINUX=disabled/g' /etc/sysconfig/selinux
     fi
 fi
-
 }
 
 # setup the mysql databases for the genome browser and grant 
@@ -815,9 +1050,266 @@ function mysqlDbSetup ()
     $MYSQL -e 'CREATE DATABASE IF NOT EXISTS hg18'
     
     $MYSQL -e "FLUSH PRIVILEGES;"
-    
 }
-# --- end of functions --- 
+
+# main function, installs the browser on Redhat/Debian and potentially even on OSX
+function installBrowser () 
+{
+    if [ ! -f $COMPLETEFLAG ]; then
+        echo '--------------------------------'
+        echo UCSC Genome Browser installation
+        echo '--------------------------------'
+        echo Detected OS: $OS/$DIST, $VER
+        echo 
+        echo This script will go through three steps:
+        echo "1 - setup apache and mysql, open port 80, deactivate SELinux"
+        echo "2 - copy CGI binaries into $APACHEDIR"
+        echo "3 - optional: download genome assembly databases into mysql and /gbdb"
+        echo
+        echo This script will now install and configure Mysql and Apache if they are not yet installed. 
+        echo "Your distribution's package manager will be used for this."
+        echo If Mysql is not installed yet, it will be installed, secured and a root password defined.
+        echo
+        echo This script will also deactivate SELinux if active and open port 80/http.
+        waitKey
+    fi
+
+    # -----  OS - SPECIFIC part -----
+    if [ ! -f $COMPLETEFLAG ]; then
+       if [[ "$DIST" == "OSX" ]]; then
+          installOsx
+       elif [[ "$DIST" == "debian" ]]; then
+          installDebian
+       elif [[ "$DIST" == "redhat" ]]; then
+          installRedhat
+       fi
+    fi
+    # OS-specific mysql/apache installers can SET_MYSQL_ROOT to 1 to request that the root
+    # mysql user password be changed
+
+    # ---- END OS-SPECIFIC part -----
+
+    if [[ "${SET_MYSQL_ROOT}" == "1" ]]; then
+       mysqlChangeRootPwd
+    fi
+
+    # before we do anything else with mysql
+    # we need to check if we can access it. 
+    # so test if we can connect to the mysql server
+    checkCanConnectMysql
+
+    disableSelinux
+
+    # Download my own statically compiled udr binary
+    if [[ ! -f /usr/local/bin/udr && "$RSYNC" = *udr* ]]; then
+      echo2 'Downloading download-tool udr (UDP-based rsync with multiple streams) to /usr/local/bin/udr'
+      waitKey
+      downloadFile $UDRURL > /usr/local/bin/udr
+      chmod a+x /usr/local/bin/udr
+    fi
+
+    # CGI DOWNLOAD AND HGCENTRAL MYSQL DB SETUP
+
+    if [ ! -f $COMPLETEFLAG ]; then
+        # test if an apache file is already present
+        if [ -f "$APACHEDIR" ]; then
+            echo2 error: please remove the file $APACHEDIR, then restart the script with "bash $0".
+            exit 249
+        fi
+
+        # check if /usr/local/apache is empty
+        # on OSX, we had to create an empty htdocs, so skip this check there
+        if [ -d "$APACHEDIR" -a "$OS" != "OSX" ]; then
+            echo2 error: the directory $APACHEDIR already exists.
+            echo2 This installer has to overwrite it, so please move it to a different name
+            echo2 or remove it. Then start the installer again with "bash $0"
+            exit 250
+        fi
+
+        mysqlDbSetup
+
+        # -------------------
+        # CGI installation
+        # -------------------
+        echo2
+        echo2 Creating $CGIBINDIR and $HTDOCDIR and downloading contents from UCSC
+        waitKey
+        
+        # create apache directories: HTML files, CGIs, temporary and custom track files
+        mkdir -p $HTDOCDIR $CGIBINDIR $TRASHDIR $TRASHDIR/customTrash
+        
+        # the CGIs create links to images in /trash which need to be accessible from htdocs
+        cd $HTDOCDIR
+        ln -fs $TRASHDIR
+        
+        # write the sample hg.conf ti the cgi-bin directory
+        echo2 Creating Genome Browser config file $CGIBINDIR/hg.conf
+        echo "$HG_CONF_STR" > $CGIBINDIR/hg.conf
+        
+        # hg.conf tweaks
+        # redhat distros have the same default socket location set in mysql as
+        # in our binaries. To allow mysql to connect, we have to remove the socket path.
+        # Also change the psxy path to the correct path for redhat, /usr/bin/
+        if [ "$DIST" == "redhat" ]; then
+           echo2 Adapting mysql socket locations in $APACHEDIR/cgi-bin/hg.conf
+           sed -i "/socket=/s/^/#/" $CGIBINDIR/hg.conf
+           sed -i "/^hgc\./s/.usr.lib.gmt.bin/\/usr\/bin/" $CGIBINDIR/hg.conf
+        elif [ "$DIST" == "OSX" ]; then
+           # in OSX adapt the sockets
+           # note that the sed -i syntax is different from linux
+           echo2 Adapting mysql socket locations in $CGIBINDIR/hg.conf
+           sockFile=$APACHEDIR/ext/mysql.socket
+           $SEDINPLACE "s|^#?socket=.*|socket=$sockFile|" $CGIBINDIR/hg.conf
+           $SEDINPLACE "s|^#?customTracks.socket.*|customTracks.socket=$sockFile|" $CGIBINDIR/hg.conf
+           $SEDINPLACE "s|^#?db.socket.*|db.socket=$sockFile|" $CGIBINDIR/hg.conf
+           $SEDINPLACE "s|^#?central.socket.*|central.socket=$sockFile|" $CGIBINDIR/hg.conf
+        fi
+        
+        # download the CGIs
+        if [[ "$OS" == "OSX" ]]; then
+            setupCgiOsx
+        else
+            # don't download RNAplot, it's a 32bit binary that won't work
+            # this means that hgGene cannot show RNA structures but that's not a big issue
+            $RSYNC -avzP --exclude RNAplot $HGDOWNLOAD::cgi-bin/ $CGIBINDIR/
+        fi
+            
+        # download the html docs, exclude some big files on OSX
+        rm -rf $APACHEDIR/htdocs/goldenpath
+        if [ "$OS" == "OSX" ]; then
+                $RSYNC --delete -azP --exclude=training --exclude=ENCODE --exclude=encode --exclude=rosenbloom.pdf --exclude=pubs*.pdf --exclude=*.{bb,bam,bai,bw,gz,2bit} --exclude=goldenpath $HGDOWNLOAD::htdocs/ $HTDOCDIR/
+        else
+                $RSYNC --delete -azP $HGDOWNLOAD::htdocs/ $HTDOCDIR/
+        fi
+        
+        # assign all files just downloaded to a valid user. 
+        # This also allows apache to write into the trash dir
+        chown -R $APACHEUSER:$APACHEUSER $CGIBINDIR $HTDOCDIR $TRASHDIR
+        
+        touch $COMPLETEFLAG
+
+        # if there is not genome to download, stop here
+        if [ "${1:-}" == "" ]; then
+           echo2
+           echo2 Install complete. You should now be able to point your web browser to this machine
+           echo2 and use your UCSC Genome Browser mirror.
+           echo2
+           echo2 Notice that this mirror is still configured to use Mysql and data files loaded
+           echo2 through the internet from UCSC. From most locations on the world, this is very slow.
+           echo2 It also requires an open outgoing TCP port 3306 for Mysql to genome-mysql.cse.ucsc.edu
+           echo2 and open TCP port 80 to hgdownload.soe.ucsc.edu.
+           echo2
+           echo2 To speed up the installation, you need to download genome data to the local
+           echo2 disk. To download a genome assembly and all its files now, call this script again with
+           echo2 the parameters '"<assemblyName1> <assemblyName2> ..."', e.g. '"'bash $0 mm10 hg19'"'
+           echo2 
+           showMyAddress
+           exit 0
+        fi
+        
+    fi
+
+    # GENOME DOWNLOAD
+
+    DBS=${*:1}
+
+    if [[ "$DBS" == "" ]]; then
+       echo2
+       echo2 The browser seems to be installed on this machine already, the file $COMPLETEFLAG exists.
+       echo2
+       echo2 If you have not downloaded any genome assemblies yet, data is loaded from UCSC,
+       echo2 which is very slow and requires outgoing TCP port 3306 to be open.
+       echo2
+       echo2 To download data files to your own machine, call this script with a list of genome assemblies, e.g. 
+       echo2   bash $0 cb1 ce6
+       echo2
+       echo2 Run '"'bash $0'"' -h to get more information on options.
+       echo2 
+       exit 125
+    fi
+
+    echo2
+    echo2 Downloading databases $DBS plus hgFixed/proteome/go from the UCSC download server
+    echo2
+    echo2 Determining download file size... please wait...
+
+    if [ "ONLYGENOMES" == "0" ]; then
+        MYSQLDBS="$DBS proteome uniProt go hgFixed"
+    else
+        MYSQLDBS="$DBS"
+    fi
+
+    # rsync is doing globbing itself, so switch it off temporarily
+    set -f
+    # use rsync to get total size of files in directories and sum the numbers up with awk
+    for db in $MYSQLDBS; do
+        rsync -avn $HGDOWNLOAD::mysql/$db/ $MYSQLDIR/$db/ $RSYNCOPTS | grep ^'total size' | cut -d' ' -f4 | tr -d ', ' 
+    done | awk '{ sum += $1 } END { print "| Required space in '$MYSQLDIR':", sum/1000000000, "GB" }'
+
+    for db in $DBS; do
+        rsync -avn $HGDOWNLOAD::gbdb/$db/ $GBDBDIR/$db/ $RSYNCOPTS | grep ^'total size' | cut -d' ' -f4 | tr -d ','
+    done | awk '{ sum += $1 } END { print "| Required space in '$GBDBDIR':", sum/1000000000, "GB" }'
+
+    echo2
+    echo2 Currently available disk space on this system:
+    echo2
+    df -h  | awk '{print "| "$0}'
+    echo2 
+    echo2 If your current disk space is not sufficient, you can mount
+    echo2 'network storage servers (e.g. NFS) or add cloud provider storage'
+    echo2 '(e.g. Openstack Cinder Volumes, Amazon EBS, Azure Storage)'
+    echo2
+    echo2 Move the current data in $GBDBDIR and $MYSQLDIR onto these volumes and
+    echo2 symlink $GBDBDIR and $MYSQLDIR to the new locations. You might have to stop 
+    echo2 Mysql temporarily to do this.
+    echo2
+    echo2 You can interrupt this script with CTRL-C now, add more space and rerun the 
+    echo2 script later with the same parameters.
+    echo2
+    waitKey
+
+    # now do the actual download of mysql files
+    for db in $MYSQLDBS; do
+       echo2 Downloading Mysql files for mysql database $db
+       $RSYNC --progress -avzp $RSYNCOPTS $HGDOWNLOAD::mysql/$db/ $MYSQLDIR/$db/ 
+       chown -R $MYSQLUSER:$MYSQLUSER $MYSQLDIR/$db
+    done
+
+    # download /gbdb files
+    for db in $DBS; do
+       echo2 Downloading $GBDBDIR files for assembly $db
+       mkdir -p $GBDBDIR
+       $RSYNC --progress -avzp $RSYNCOPTS $HGDOWNLOAD::gbdb/$db/ $GBDBDIR/$db/
+       chown -R $APACHEUSER:$APACHEUSER $GBDBDIR/$db
+    done
+
+    set +f
+
+    goOffline # modify hg.conf and remove all statements that use the UCSC download server
+
+    echo2
+    echo2 Install complete. You should now be able to point your web browser to this machine
+    echo2 and use your UCSC Genome Browser mirror.
+    echo2
+
+    showMyAddress
+
+    echo2 
+    echo2 Note that the installation assumes that emails cannot be sent from
+    echo2 this machine. New Genome Browser user accounts will not receive confirmation emails.
+    echo2 To change this, edit the file $APACHEDIR/cgi-bin/hg.conf and modify the settings
+    echo2 'that start with "login.", mainly "login.mailReturnAddr"'.
+    echo2
+    echo2 Please send any other questions to the mailing list, genome-mirror@soe.ucsc.edu .
+    waitKey
+}
+
+function cleanTrash () 
+{
+    echo2 Removing files older than one day in $TRASHDIR, not running on $TRASHDIR/ct
+    find $TRASHDIR -not -path $TRASHDIR/ct/\* -and -type f -atime +1 -exec rm -f {} \;
+}
+# ------------ end of utility functions ----------------
 
 # -- START OF SCRIPT  --- MAIN ---
 
@@ -840,21 +1332,27 @@ while getopts ":baut:hof" opt; do
   case $opt in
     h)
       cat <<EOF
-$0 [options] [assemblyList] - UCSC genome browser install script
+$0 [options] [command] [assemblyList] - UCSC genome browser install script
 
-parameters:
-  no parameter       - setup Apache and Mysql, do not download any assembly
+command is one of:
+  install    - install the genome browser in this machine
+  update     - update the genome browser binaries and data
+  clean      - remove temporary files of the genome browser
+
+parameters for 'install':
   <assemblyList>     - download Mysql + /gbdb files for a space-separated
                        list of genomes
 
 examples:
-  bash $0             - install Genome Browser, do not download any genome
+  bash $0 install     - install Genome Browser, do not download any genome
                         assembly switch to on-the-fly mode (see the -f option)
-  bash $0 hg19 mm9    - install Genome Browser, download hg19 and mm9, switch
+  bash $0 install hg19 mm9 - install Genome Browser, download hg19 and mm9, switch
                         to offline mode (see the -o option)
-  bash $0 -t noEncode hg19  - install Genome Browser, download hg19 but no
-                              ENCODE tables switch to offline mode (see the -o
+  bash $0 install -t noEncode hg19  - install Genome Browser, download hg19 but no
+                              ENCODE tables, then switch to offline mode (see the -o
                               option)
+  bash $0 update     -  update the Genome Browser CGI programs
+  bash $0 clean      -  remove temporary file in the $track
 
 All options have to precede the list of genome assemblies.
 
@@ -1004,263 +1502,25 @@ fi
 # cronjobs.
 # This currently does NOT update the Mysql databases
 
+if [ "${1:-}" == "install" ]; then
+   installBrowser
+fi
+
 if [ "${1:-}" == "update" ]; then
    # update the CGIs
-   rsync -avzP --delete --exclude hg.conf $HGDOWNLOAD::cgi-bin/ $APACHEDIR/cgi-bin/ --exclude RNAplot
+   $RSYNC -avzP --delete --exclude hg.conf $HGDOWNLOAD::cgi-bin/ $APACHEDIR/cgi-bin/ --exclude RNAplot
    # update the html docs
-   rsync -avzP --delete --exclude trash $HGDOWNLOAD::htdocs/ $APACHEDIR/htdocs/ 
+   $RSYNC -avzP --delete --exclude trash $HGDOWNLOAD::htdocs/ $APACHEDIR/htdocs/ 
    # assign all downloaded files to a valid user. 
    chown -R $APACHEUSER:$APACHEUSER $APACHEDIR/*
+   # update the mysql DBs
+   #$RSYNC --progress -avzp $RSYNCOPTS $HGDOWNLOAD::mysql/ $MYSQLDIR/
+   # update gbdb
+   #rsync -avn $HGDOWNLOAD::gbdb/$db/ $GBDBDIR/$db/ $RSYNCOPTS | grep ^'total size' | cut -d' ' -f4 | tr -d ','
    echo update finished
    exit 10
 fi
 
-# Start apache/mysql setup if the script is run without a parameter
-
-if [ ! -f $COMPLETEFLAG ]; then
-    echo '--------------------------------'
-    echo UCSC Genome Browser installation
-    echo '--------------------------------'
-    echo Detected OS: $OS/$DIST, $VER
-    echo 
-    echo This script will go through three steps:
-    echo "1 - setup apache and mysql, open port 80, deactivate SELinux"
-    echo "2 - copy CGI binaries into $APACHEDIR"
-    echo "3 - optional: download genome assembly databases into mysql and /gbdb"
-    echo
-    echo This script will now install and configure Mysql and Apache if they are not yet installed. 
-    echo "Your distribution's package manager will be used for this."
-    echo If Mysql is not installed yet, it will be installed, secured and a root password defined.
-    echo
-    echo This script will also deactivate SELinux if active and open port 80/http.
-    waitKey
+if [ "${1:-}" == "clean" ]; then
+    cleanTrash
 fi
-
-# -----  OS - SPECIFIC part -----
-if [ ! -f $COMPLETEFLAG ]; then
-   if [[ "$DIST" == "OSX" ]]; then
-      installOsx
-   elif [[ "$DIST" == "debian" ]]; then
-      installDebian
-   elif [[ "$DIST" == "redhat" ]]; then
-      installRedhat
-   fi
-fi
-# OS-specific mysql/apache installers can SET_MYSQL_ROOT to 1 to request that the root
-# mysql user password be changed
-
-# ---- END OS-SPECIFIC part -----
-
-if [[ "${SET_MYSQL_ROOT}" == "1" ]]; then
-   mysqlChangeRootPwd
-fi
-
-# before we do anything else with mysql
-# we need to check if we can access it. 
-# so test if we can connect to the mysql server
-# need to temporarily deactivate error abort mode, in case mysql cannot connect
-
-checkCanConnectMysql
-
-# Download over own statically compiled udr binary
-if [[ ! -f /usr/local/bin/udr && "$RSYNC" = *udr* ]]; then
-  echo2 'Downloading download-tool udr (UDP-based rsync with multiple streams) to /usr/local/bin/udr'
-  waitKey
-  downloadFile $UDRURL > /usr/local/bin/udr
-  chmod a+x /usr/local/bin/udr
-fi
-
-# CGI DOWNLOAD AND HGCENTRAL MYSQL DB SETUP
-
-if [ ! -f $COMPLETEFLAG ]; then
-    # test if an apache file is already present
-    if [ -f "$APACHEDIR" ]; then
-        echo2 error: please remove the file $APACHEDIR, then restart the script with "bash $0".
-        exit 249
-    fi
-
-    # check if /usr/local/apache is empty
-    # on OSX, we had to create an empty htdocs, so skip this check there
-    if [ -d "$APACHEDIR" -a "$OS" != "OSX" ]; then
-        echo2 error: the directory $APACHEDIR already exists.
-        echo2 This installer has to overwrite it, so please move it to a different name
-        echo2 or remove it. Then start the installer again with "bash $0"
-        exit 250
-    fi
-
-    mysqlDbSetup
-
-    # -------------------
-    # CGI installation
-    # -------------------
-    echo2
-    echo2 Creating $APACHEDIR/cgi-bin and $APACHEDIR/htdocs and downloading contents from UCSC
-    waitKey
-    
-    # create apache directories: HTML files, CGIs, temporary and custom track files
-    mkdir -p $APACHEDIR/htdocs $APACHEDIR/cgi-bin $APACHEDIR/trash $APACHEDIR/trash/customTrash
-    
-    # the CGIs create links to images in /trash which need to be accessible from htdocs
-    cd $APACHEDIR/htdocs 
-    ln -fs ../trash
-    
-    # download the sample hg.conf into the cgi-bin directory
-    echo2 Downloading Genome Browser config file $APACHEDIR/cgi-bin/hg.conf
-    downloadFile $HGCONFURL > $APACHEDIR/cgi-bin/hg.conf
-    
-    # hg.conf tweaks
-    # redhat distros have the same default socket location set in mysql as
-    # in our binaries. To allow mysql to connect, we have to remove the socket path.
-    # Also change the psxy path to the correct path for redhat, /usr/bin/
-    if [ "$DIST" == "redhat" ]; then
-       echo2 Adapting mysql socket locations in $APACHEDIR/cgi-bin/hg.conf
-       sed -i "/socket=/s/^/#/" $APACHEDIR/cgi-bin/hg.conf
-       sed -i "/^hgc\./s/.usr.lib.gmt.bin/\/usr\/bin/" $APACHEDIR/cgi-bin/hg.conf
-    elif [ "$DIST" == "OSX" ]; then
-       # in OSX adapt the sockets
-       # note that the sed -i syntax is different from linux
-       echo2 Adapting mysql socket locations in $APACHEDIR/cgi-bin/hg.conf
-       sockFile=$APACHEDIR/ext/mysql.socket
-       $SEDINPLACE "s|^#?socket=.*|socket=$sockFile|" $APACHEDIR/cgi-bin/hg.conf
-       $SEDINPLACE "s|^#?customTracks.socket.*|customTracks.socket=$sockFile|" $APACHEDIR/cgi-bin/hg.conf
-       $SEDINPLACE "s|^#?db.socket.*|db.socket=$sockFile|" $APACHEDIR/cgi-bin/hg.conf
-       $SEDINPLACE "s|^#?central.socket.*|central.socket=$sockFile|" $APACHEDIR/cgi-bin/hg.conf
-    fi
-    
-    # download the CGIs
-    if [[ "$OS" == "OSX" ]]; then
-        setupCgiOsx
-    else
-        # don't download RNAplot, it's a 32bit binary that won't work
-        # this means that hgGene cannot show RNA structures but that's not a big issue
-        $RSYNC -avzP --exclude RNAplot $HGDOWNLOAD::cgi-bin/ $APACHEDIR/cgi-bin/
-    fi
-        
-    # download the html docs, exclude some big files on OSX
-    rm -rf $APACHEDIR/htdocs/goldenpath
-    if [ "$OS" == "OSX" ]; then
-            $RSYNC --delete -azP --exclude=training --exclude=ENCODE --exclude=encode --exclude=rosenbloom.pdf --exclude=pubs*.pdf --exclude=*.{bb,bam,bai,bw,gz,2bit} --exclude=goldenpath $HGDOWNLOAD::htdocs/ $APACHEDIR/htdocs/ 
-    else
-            $RSYNC --delete -azP $HGDOWNLOAD::htdocs/ $APACHEDIR/htdocs/ 
-    fi
-    
-    # assign all files just downloaded to a valid user. 
-    # This also allows apache to write into the trash dir
-    chown -R $APACHEUSER:$APACHEUSER $APACHEDIR/cgi-bin $APACHEDIR/htdocs $APACHEDIR/trash
-    
-    touch $COMPLETEFLAG
-
-    # if there is not genome to download, stop here
-    if [ "${1:-}" == "" ]; then
-       echo2
-       echo2 Install complete. You should now be able to point your web browser to this machine
-       echo2 and use your UCSC Genome Browser mirror.
-       echo2
-       echo2 Notice that this mirror is still configured to use Mysql and data files loaded
-       echo2 through the internet from UCSC. From most locations on the world, this is very slow.
-       echo2 It also requires an open outgoing TCP port 3306 for Mysql to genome-mysql.cse.ucsc.edu
-       echo2 and open TCP port 80 to hgdownload.soe.ucsc.edu.
-       echo2
-       echo2 To speed up the installation, you need to download genome data to the local
-       echo2 disk. To download a genome assembly and all its files now, call this script again with
-       echo2 the parameters '"<assemblyName1> <assemblyName2> ..."', e.g. '"'bash $0 mm10 hg19'"'
-       echo2 
-       showMyAddress
-       exit 0
-    fi
-    
-fi
-
-# GENOME DOWNLOAD
-
-DBS=${*:1}
-
-if [[ "$DBS" == "" ]]; then
-   echo2
-   echo2 The browser seems to be installed on this machine already, the file $COMPLETEFLAG exists.
-   echo2
-   echo2 If you have not downloaded any genome assemblies yet, data is loaded from UCSC,
-   echo2 which is very slow and requires outgoing TCP port 3306 to be open.
-   echo2
-   echo2 To download data files to your own machine, call this script with a list of genome assemblies, e.g. 
-   echo2   bash $0 cb1 ce6
-   echo2
-   echo2 Run '"'bash $0'"' -h to get more information on options.
-   echo2 
-   exit 125
-fi
-
-echo2
-echo2 Downloading databases $DBS plus hgFixed/proteome/go from the UCSC download server
-echo2
-echo2 Determining download file size... please wait...
-
-if [ "ONLYGENOMES" == "0" ]; then
-    MYSQLDBS="$DBS proteome uniProt go hgFixed"
-else
-    MYSQLDBS="$DBS"
-fi
-
-# rsync is doing globbing itself, so switch it off temporarily
-set -f
-# use rsync to get total size of files in directories and sum the numbers up with awk
-for db in $MYSQLDBS; do
-    rsync -avn $HGDOWNLOAD::mysql/$db/ $MYSQLDIR/$db/ $RSYNCOPTS | grep ^'total size' | cut -d' ' -f4 | tr -d ', ' 
-done | awk '{ sum += $1 } END { print "| Required space in '$MYSQLDIR':", sum/1000000000, "GB" }'
-
-for db in $DBS; do
-    rsync -avn $HGDOWNLOAD::gbdb/$db/ $GBDBDIR/$db/ $RSYNCOPTS | grep ^'total size' | cut -d' ' -f4 | tr -d ','
-done | awk '{ sum += $1 } END { print "| Required space in '$GBDBDIR':", sum/1000000000, "GB" }'
-
-echo2
-echo2 Currently available disk space on this system:
-echo2
-df -h  | awk '{print "| "$0}'
-echo2 
-echo2 If your current disk space is not sufficient, you can mount
-echo2 'network storage servers (e.g. NFS) or add cloud provider storage'
-echo2 '(e.g. Openstack Cinder Volumes, Amazon EBS, Azure Storage)'
-echo2
-echo2 Move the current data in $GBDBDIR and $MYSQLDIR onto these volumes and
-echo2 symlink $GBDBDIR and $MYSQLDIR to the new locations. You might have to stop 
-echo2 Mysql temporarily to do this.
-echo2
-echo2 You can interrupt this script with CTRL-C now, add more space and rerun the 
-echo2 script later with the same parameters.
-echo2
-waitKey
-
-# now do the actual download of mysql files
-for db in $MYSQLDBS; do
-   echo2 Downloading Mysql files for mysql database $db
-   $RSYNC --progress -avzp $RSYNCOPTS $HGDOWNLOAD::mysql/$db/ $MYSQLDIR/$db/ 
-   chown -R $MYSQLUSER:$MYSQLUSER $MYSQLDIR/$db
-done
-
-# download /gbdb files
-for db in $DBS; do
-   echo2 Downloading $GBDBDIR files for assembly $db
-   mkdir -p $GBDBDIR
-   $RSYNC --progress -avzp $RSYNCOPTS $HGDOWNLOAD::gbdb/$db/ $GBDBDIR/$db/
-   chown -R $APACHEUSER:$APACHEUSER $GBDBDIR/$db
-done
-
-set +f
-
-goOffline # modify hg.conf and remove all statements that use the UCSC download server
-
-echo2
-echo2 Install complete. You should now be able to point your web browser to this machine
-echo2 and use your UCSC Genome Browser mirror.
-echo2
-
-showMyAddress
-
-echo2 
-echo2 Note that the installation assumes that emails cannot be sent from
-echo2 this machine. New Genome Browser user accounts will not receive confirmation emails.
-echo2 To change this, edit the file $APACHEDIR/cgi-bin/hg.conf and modify the settings
-echo2 'that start with "login.", mainly "login.mailReturnAddr"'.
-echo2
-echo2 Please send any other questions to the mailing list, genome-mirror@soe.ucsc.edu .
-waitKey
