@@ -305,6 +305,54 @@ browser.indelOptions=on
 
 EOF_HGCONF
 
+read -r -d '' HELP_STR << EOF_HELP
+$0 [options] [command] [assemblyList] - UCSC genome browser install script
+
+command is one of:
+  install    - install the genome browser in this machine
+  update     - update the genome browser binaries and data
+  clean      - remove temporary files of the genome browser
+
+parameters for 'install':
+  <assemblyList>     - download Mysql + /gbdb files for a space-separated
+                       list of genomes
+
+examples:
+  bash $0 install     - install Genome Browser, do not download any genome
+                        assembly switch to on-the-fly mode (see the -f option)
+  bash $0 install hg19 mm9 - install Genome Browser, download hg19 and mm9, switch
+                        to offline mode (see the -o option)
+  bash $0 install -t noEncode hg19  - install Genome Browser, download hg19 but no
+                              ENCODE tables, then switch to offline mode (see the -o
+                              option)
+  bash $0 update     -  update the Genome Browser CGI programs
+  bash $0 clean      -  remove temporary file in the $track
+
+All options have to precede the list of genome assemblies.
+
+options:
+  -a   - use alternative download server at SDSC
+  -b   - batch mode, do not prompt for key presses
+  -t   - download track selection, requires a value.
+         Download only certain tracks, possible values:
+         noEncode = do not download any tables with the wgEncode prefix, 
+                    except Gencode genes, saves 4TB/6TB for hg19
+         bestEncode = our ENCODE recommendation, all summary tracks, saves
+                      2TB/6TB for hg19
+         minimal = only RefSeq/Gencode genes and SNPs, 5GB for hg19
+  -u   - use UDR (fast UDP) file transfers for the download.
+         Requires at least one open UDP incoming port 9000-9100.
+         (UDR is not available for Mac OSX)
+  -o   - switch to offline-mode. Remove all statements from hg.conf that allow
+         loading data on-the-fly from the UCSC download server. Requires that
+         you have downloaded at least one assembly. Default if at least one
+         assembly has been specified.
+  -f   - switch to on-the-fly mode. Change hg.conf to allow loading data
+         through the internet, if it is not available locally. The default mode
+         unless an assembly has been provided during install
+  -h   - this help message
+EOF_HELP
+
 # ----------------- END OF DEFAULT INLINE CONFIG FILES --------------------------
 
 # ----------------- UTILITY FUNCTIONS --------------------------
@@ -1328,56 +1376,16 @@ trap errorHandler ERR
 
 # OPTION PARSING
 
+# show help message if no argument is specified
+if [[ $# -eq 0 ]] ; then
+   echo "$HELP_STR"
+   exit 0
+fi
+
 while getopts ":baut:hof" opt; do
   case $opt in
     h)
-      cat <<EOF
-$0 [options] [command] [assemblyList] - UCSC genome browser install script
-
-command is one of:
-  install    - install the genome browser in this machine
-  update     - update the genome browser binaries and data
-  clean      - remove temporary files of the genome browser
-
-parameters for 'install':
-  <assemblyList>     - download Mysql + /gbdb files for a space-separated
-                       list of genomes
-
-examples:
-  bash $0 install     - install Genome Browser, do not download any genome
-                        assembly switch to on-the-fly mode (see the -f option)
-  bash $0 install hg19 mm9 - install Genome Browser, download hg19 and mm9, switch
-                        to offline mode (see the -o option)
-  bash $0 install -t noEncode hg19  - install Genome Browser, download hg19 but no
-                              ENCODE tables, then switch to offline mode (see the -o
-                              option)
-  bash $0 update     -  update the Genome Browser CGI programs
-  bash $0 clean      -  remove temporary file in the $track
-
-All options have to precede the list of genome assemblies.
-
-options:
-  -a   - use alternative download server at SDSC
-  -b   - batch mode, do not prompt for key presses
-  -t   - download track selection, requires a value.
-         Download only certain tracks, possible values:
-         noEncode = do not download any tables with the wgEncode prefix, 
-                    except Gencode genes, saves 4TB/6TB for hg19
-         bestEncode = our ENCODE recommendation, all summary tracks, saves
-                      2TB/6TB for hg19
-         minimal = only RefSeq/Gencode genes and SNPs, 5GB for hg19
-  -u   - use UDR (fast UDP) file transfers for the download.
-         Requires at least one open UDP incoming port 9000-9100.
-         (UDR is not available for Mac OSX)
-  -o   - switch to offline-mode. Remove all statements from hg.conf that allow
-         loading data on-the-fly from the UCSC download server. Requires that
-         you have downloaded at least one assembly. Default if at least one
-         assembly has been specified.
-  -f   - switch to on-the-fly mode. Change hg.conf to allow loading data
-         through the internet, if it is not available locally. The default mode
-         unless an assembly has been provided during install
-  -h   - this help message
-EOF
+      echo "$HELP_STR"
       exit 0
       ;;
     b)
