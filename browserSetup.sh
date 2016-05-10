@@ -88,6 +88,10 @@ STARTSCRIPTURL=https://raw.githubusercontent.com/maximilianh/browserInstall/mast
 # They are inline so we do not create a dependency on another file 
 # that has to be pushed to hgdownload when this script is updated
 
+# the read command always has an error exit code for here docs, so we deactivate 
+# exit on error for a moment
+set +e
+
 # syntax from http://stackoverflow.com/questions/23929235/multi-line-string-with-extra-space
 read -r -d '' APACHE_CONFIG_STR << EOF_APACHECONF
 # get rid of the warning at apache2 startup
@@ -195,7 +199,7 @@ slow-db.host=genome-mysql.cse.ucsc.edu
 slow-db.user=genomep
 slow-db.password=password
 
-# if data is loaded from UCSC with slow-db, use the 'tableList'
+# if data is loaded from UCSC with slow-db, use the tableList
 # mysql table to do table field name checks instead of DESCRIBE
 showTableCache=tableList
 
@@ -217,10 +221,10 @@ hgEncodeVocabDocBaseUrl=http://genome.ucsc.edu
 # then this defaultGenome would read: defaultGenome=Mouse
 defaultGenome=Human
 
-# trackDb table to use. A simple value of `trackDb' is normally sufficient.
+# trackDb table to use. A simple value of trackDb is normally sufficient.
 # In general, the value is a comma-separated list of trackDb format tables to
 # search.  This supports local tracks combined with a mirror of the trackDb
-# table from UCSC. The names should be in the form `trackDb_suffix'. This
+# table from UCSC. The names should be in the form trackDb_suffix. This
 # implies a parallel hgFindSpec format search table exists in the form
 # hgFindSpec_suffix.  The specified trackDb tables are searched in the order
 # specified, with the first occurance of a track being used.  You may associate
@@ -326,7 +330,7 @@ examples:
                               ENCODE tables, then switch to offline mode (see the -o
                               option)
   bash $0 update     -  update the Genome Browser CGI programs
-  bash $0 clean      -  remove temporary file in the $track
+  bash $0 clean      -  remove temporary files
 
 All options have to precede the list of genome assemblies.
 
@@ -352,6 +356,8 @@ options:
          unless an assembly has been provided during install
   -h   - this help message
 EOF_HELP
+
+set -e
 
 # ----------------- END OF DEFAULT INLINE CONFIG FILES --------------------------
 
@@ -1111,7 +1117,7 @@ function installBrowser ()
         echo 
         echo This script will go through three steps:
         echo "1 - setup apache and mysql, open port 80, deactivate SELinux"
-        echo "2 - copy CGI binaries into $APACHEDIR"
+        echo "2 - copy CGI binaries into $CGIBINDIR, html files into HTDOCDIR"
         echo "3 - optional: download genome assembly databases into mysql and /gbdb"
         echo
         echo This script will now install and configure Mysql and Apache if they are not yet installed. 
@@ -1508,26 +1514,42 @@ fi
 # UPDATE MODE, parameter "update": This is not for the initial install, but
 # later, when the user wants to update the browser. This can be used from
 # cronjobs.
-# This currently does NOT update the Mysql databases
 
 if [ "${1:-}" == "install" ]; then
    installBrowser
-fi
-
-if [ "${1:-}" == "update" ]; then
+elif [ "${1:-}" == "update" ]; then
    # update the CGIs
-   $RSYNC -avzP --delete --exclude hg.conf $HGDOWNLOAD::cgi-bin/ $APACHEDIR/cgi-bin/ --exclude RNAplot
+   $RSYNC -avzP --exclude RNAplot --exclude hg.conf --exclude hg.conf.local $HGDOWNLOAD::cgi-bin/ $APACHEDIR/cgi-bin/ --exclude RNAplot
    # update the html docs
-   $RSYNC -avzP --delete --exclude trash $HGDOWNLOAD::htdocs/ $APACHEDIR/htdocs/ 
+   echo Updating Apache htdocs
+   $RSYNC -avzP --exclude=*.{bb,bam,bai,bw,gz,2bit,bed} --exclude ENCODE --exclude trash $HGDOWNLOAD::htdocs/ $APACHEDIR/htdocs/ 
    # assign all downloaded files to a valid user. 
    chown -R $APACHEUSER:$APACHEUSER $APACHEDIR/*
-   # update the mysql DBs
-   #$RSYNC --progress -avzp $RSYNCOPTS $HGDOWNLOAD::mysql/ $MYSQLDIR/
+   echo
+
    # update gbdb
-   #rsync -avn $HGDOWNLOAD::gbdb/$db/ $GBDBDIR/$db/ $RSYNCOPTS | grep ^'total size' | cut -d' ' -f4 | tr -d ','
+   DBS=`ls $GBDBDIR/`
+   echo updating GBDB: $DBS
+   for db in $DBS/*; do 
+       echo syncing gbdb: $db
+       rsync -avzp $RSYNCOPTS $HGDOWNLOAD::gbdb/$db/ $GBDBDIR/$db/ 
+   done
+
+   # update the mysql DBs
+   DBS=`ls /var/lib/mysql/ | egrep -v '(Trash$)|(hgTemp)|(^ib_)|(^ibdata)|(^mysql)|(performance)|(.flag$)|(hgcentral)'`
+   for db in $DBS/*; do 
+       echo syncing full mysql database: $db
+       $RSYNC --update --progress -avzp $RSYNCOPTS $HGDOWNLOAD::mysql/$db $MYSQLDIR/$db
+   done
+
    echo update finished
    exit 10
+else
+   echo Unknown command: $1
+   echo "$HELP_STR"
+   exit 1
 fi
+
 
 if [ "${1:-}" == "clean" ]; then
     cleanTrash
