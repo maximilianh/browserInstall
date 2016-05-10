@@ -1335,6 +1335,16 @@ function downloadGenomes
 
     showMyAddress
 
+    echo2 If have not downloaded the human hg38 assembly and you get an error message 
+    echo2 'Could not connect to database' on the genome selection page, then modify 
+    echo2 the hg.conf file and change the organism, e.g. to Mouse if you downloaded mouse.
+    echo2 with a command like "'nano /usr/local/apache/cgi-bin/hg.conf'"
+    echo2 Search for Human in this file and replace it with the organism of the 
+    echo2 you downloaded.
+    echo2 If the assembly is not the default for this organism, you also have to change 
+    echo2 the mysql table hgcentral.defaultDb to the correct database for your organism, 
+    echo2 e.g. '"mm9"' for Mouse, with a command like
+    echo2 mysql hgcentral -e \''update defaultDb set name="mm10" where genome="Mouse"'\'
     echo2 
     echo2 Note that the installation assumes that emails cannot be sent from
     echo2 this machine. New Genome Browser user accounts will not receive confirmation emails.
