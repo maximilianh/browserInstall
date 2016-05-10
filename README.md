@@ -4,7 +4,7 @@ This script installs mysql, apache, ghostscript, configures them and copies the 
 Browser CGIs onto the local machine under /usr/local/apache/. At the end it shows instructions
 how to download genome assemblies to the local machine. 
 
-The script has been tested with Ubuntu 14 LTS, Centos 6, Centos 7, Fedora 20 and OSX 10.10.
+The script has been tested with Ubuntu 14 LTS, Centos 6, Centos 6.7, Centos 7, Fedora 20 and OSX 10.10.
 
 It has also been tested on virtual machines in Amazon EC2 (Centos 6 and Ubuntu
 14) and Microsoft Azure (Ubuntu). If you do not want to download the full genome assembly,
@@ -16,16 +16,16 @@ exceeds the current maximum size of a single Amazon EBS volume.
 Run this script as root like this:
 
     sudo -i
-    wget https://raw.githubusercontent.com/maximilianh/browserInstall/master/browserInstall.sh
-    bash browserInstall.sh
+    wget https://raw.githubusercontent.com/maximilianh/browserInstall/master/browserSetup.sh
+    bash browserSetup.sh install
 
-On OSX, use curl:
+If you do not have wget installed, use curl instead:
 
     sudo -i
-    curl https://raw.githubusercontent.com/maximilianh/browserInstall/master/browserInstall.sh > browserInstall.sh
-    bash browserInstall.sh
+    curl https://raw.githubusercontent.com/maximilianh/browserInstall/master/browserSetup.sh > browserSetup.sh
+    bash browserSetup.sh install
 
-The script goes through three steps:
+The installation goes through three steps:
 
 1. Mysql and Apache are installed and setup with the right package manager (yum or apt-get or port). A default random password is set for the Mysql root user and added to the ~/.my.cnf file of the Unix root account. 
     1. If you already have setup Mysql, you would need to create to create the file ~/.my.cnf, the script will detect this and create a template file for you.
