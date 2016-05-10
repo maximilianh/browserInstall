@@ -314,8 +314,10 @@ $0 [options] [command] [assemblyList] - UCSC genome browser install script
 
 command is one of:
   install    - install the genome browser in this machine
-  minimal    - download only a minimal set of tables
-  download   - download a full assembly (for hg19, see the -t option below)
+  minimal    - download only a minimal set of tables. Missing tables are
+               downloaded on-the-fly from UCSC.
+  download   - download a full assembly (for hg19, see the -t option below). 
+               No data is downloaded on-the-fly from UCSC.
   update     - update the genome browser binaries and data, mirrors
                all tables of an assembly
   clean      - remove temporary files of the genome browser, do not delete
