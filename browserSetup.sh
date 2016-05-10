@@ -321,7 +321,7 @@ command is one of:
   clean      - remove temporary files of the genome browser, do not delete
                any custom tracks
 
-parameters for 'install':
+parameters for 'install' and 'minimal':
   <assemblyList>     - download Mysql + /gbdb files for a space-separated
                        list of genomes
 
@@ -348,7 +348,7 @@ options:
                     except Gencode genes, saves 4TB/6TB for hg19
          bestEncode = our ENCODE recommendation, all summary tracks, saves
                       2TB/6TB for hg19
-         minimal = only RefSeq/Gencode genes and SNPs, 5GB for hg19
+         main = only RefSeq/Gencode genes and SNPs, 5GB for hg19
   -u   - use UDR (fast UDP) file transfers for the download.
          Requires at least one open UDP incoming port 9000-9100.
          (UDR is not available for Mac OSX)
@@ -1521,7 +1521,7 @@ while getopts ":baut:hof" opt; do
       elif [[ "$val" == "noEncode" ]]; then
           RSYNCOPTS="-m --include=wgEncodeGencode* --include */ --exclude=wgEncode*"
           ONLYGENOMES=0
-      elif [[ "$val" == "minimal" ]]; then
+      elif [[ "$val" == "main" ]]; then
           # gbCdnaInfo
           RSYNCOPTS="-m --include=grp.* --include=gold.* --include=chromInfo.* --include=trackDb* --include=hgFindSpec.* --include=gap.* --include=*.2bit --include=html/description.html --include=refGene* --include=refLink.* --include=wgEncodeGencode*V19* --include snp142Common.* --include rmsk* --include */ --exclude=*"
           ONLYGENOMES=1 # do not download hgFixed,go,proteome etc
