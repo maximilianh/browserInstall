@@ -354,8 +354,8 @@ options:
          (UDR is not available for Mac OSX)
   -o   - switch to offline-mode. Remove all statements from hg.conf that allow
          loading data on-the-fly from the UCSC download server. Requires that
-         you have downloaded at least one assembly. Default if at least one
-         assembly has been specified.
+         you have downloaded at least one assembly, using the '"download"' 
+         command, not the '"mirror"' command.
   -f   - switch to on-the-fly mode. Change hg.conf to allow loading data
          through the internet, if it is not available locally. The default mode
          unless an assembly has been provided during install
