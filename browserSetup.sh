@@ -314,8 +314,12 @@ $0 [options] [command] [assemblyList] - UCSC genome browser install script
 
 command is one of:
   install    - install the genome browser in this machine
-  update     - update the genome browser binaries and data
-  clean      - remove temporary files of the genome browser
+  minimal    - download only a minimal set of tables
+  download   - download a full assembly (for hg19, see the -t option below)
+  update     - update the genome browser binaries and data, mirrors
+               all tables of an assembly
+  clean      - remove temporary files of the genome browser, do not delete
+               any custom tracks
 
 parameters for 'install':
   <assemblyList>     - download Mysql + /gbdb files for a space-separated
@@ -323,10 +327,11 @@ parameters for 'install':
 
 examples:
   bash $0 install     - install Genome Browser, do not download any genome
-                        assembly switch to on-the-fly mode (see the -f option)
-  bash $0 install hg19 mm9 - install Genome Browser, download hg19 and mm9, switch
+                        assembly, switch to on-the-fly mode (see the -f option)
+  bash $0 minimal hg19 - download only the minimal tables for the hg19 assembly
+  bash $0 download hg19 mm9 - download hg19 and mm9, switch
                         to offline mode (see the -o option)
-  bash $0 install -t noEncode hg19  - install Genome Browser, download hg19 but no
+  bash $0 download -t noEncode hg19  - install Genome Browser, download hg19 but no
                               ENCODE tables, then switch to offline mode (see the -o
                               option)
   bash $0 update     -  update the Genome Browser CGI programs
@@ -337,7 +342,7 @@ All options have to precede the list of genome assemblies.
 options:
   -a   - use alternative download server at SDSC
   -b   - batch mode, do not prompt for key presses
-  -t   - download track selection, requires a value.
+  -t   - hg19-only download track selection, requires a value.
          Download only certain tracks, possible values:
          noEncode = do not download any tables with the wgEncode prefix, 
                     except Gencode genes, saves 4TB/6TB for hg19
@@ -397,6 +402,7 @@ fi
 
 function errorHandler ()
 {
+    startMysql # in case we stopped it
     echo2 Error: the UCSC Genome Browser installation script failed with an error
     echo2 You can run it again with '"bash -x '$0'"' to see what failed.
     echo2 You can then send us an email with the error message.
@@ -419,6 +425,16 @@ function goOffline ()
       $SEDINPLACE 's/^gbdbLoc1=/#gbdbLoc1=/g' $APACHEDIR/cgi-bin/hg.conf
       $SEDINPLACE 's/^gbdbLoc2=/#gbdbLoc2=/g' $APACHEDIR/cgi-bin/hg.conf
       $SEDINPLACE 's/^showTableCache=/#showTableCache=/g' $APACHEDIR/cgi-bin/hg.conf
+}
+
+# activate the mysql failover and gbdb and tableList again in hg.conf
+function goOnline ()
+{
+      # remove the comments
+      $SEDINPLACE 's/^#slow-db\./slow-db\./g' $APACHEDIR/cgi-bin/hg.conf
+      $SEDINPLACE 's/^#gbdbLoc1=/gbdbLoc1=/g' $APACHEDIR/cgi-bin/hg.conf
+      $SEDINPLACE 's/^#gbdbLoc2=/gbdbLoc2=/g' $APACHEDIR/cgi-bin/hg.conf
+      $SEDINPLACE 's/^#showTableCache=/showTableCache=/g' $APACHEDIR/cgi-bin/hg.conf
 }
 
 # wait for a key press
@@ -1024,8 +1040,10 @@ fi
 # DETECT AND DEACTIVATE SELINUX: if it exists and is active
 function disableSelinux () 
 {
-if [ hash selinuxenabled > /dev/null ]; then
-    if selinuxenabled; then
+# first check if the command exists on this system
+# then check if it comes back with a non-zero error code, which means it is enabled
+if [ type selinuxenabled > /dev/null 2> /dev/null ]; then
+    if [ selinuxenabled ]; then
        echo2
        echo2 The Genome Browser requires that SELINUX is deactivated.
        echo2 Deactivating it now.
@@ -1355,10 +1373,106 @@ function downloadGenomes
     waitKey
 }
 
+# stop the mysql database server, so we can write into its data directory
+function stopMysql
+{
+    service mysqld stop
+}
+
+# start the mysql database server
+function startMysql
+{
+    service mysqld start
+}
+
+# only download a set of minimal mysql tables, to make a genome browser that is using the mysql failover mechanism
+# faster. This should be fast enough in the US West Coast area and maybe even on the East Coast.
+function downloadMinimal
+{
+    clear
+    DBS=$*
+
+    echo2
+    echo2 Downloading minimal tables for databases $DBS 
+
+    # only these db tables are copied over by default
+    minRsyncOpt="--include=cytoBand.* --include=chromInfo.* --include=cytoBandIdeo.* --include=kgColor.* --include=knownGene.* --include=kgXref.* --include=ensemblLift.* --include=ucscToEnsemblwgEncodeRegTfbsCells.* --include=tableList.* --include=refSeqStatus.* --include=wgEncodeRegTfbsCellsV3.* --include=extFile.* --include=trackDb.* --include=grp.* --include=ucscRetroInfo5.* --include=refLink.* --include=ucscRetroSeq5.* --include=ensemblLift.* --include=knownCanonical.* --include=gbExtFile.* --include=flyBase2004Xref --include=hgFindSpec.*"
+
+    # these tables are not used for searches by default. Searches are very slow. We focus on genes.
+    notSearchTables='wgEncodeGencodeBasicV19 wgEncodeGencodeCompV17 wgEncodeGencodeBasicV14 wgEncodeGencodeBasicV17 wgEncode GencodeCompV14 mgcFullMrna wgEncodeGencodeBasicV7 orfeomeMrna wgEncodeGencodePseudoGeneV14 wgEncodeGencodePseudoGeneV17 wgEncodeGencodePseudoGeneV19 wgEncodeGencodeCompV7 knownGeneOld6 geneReviews transMapAlnSplicedEst gbCdnaInfo oreganno vegaPseudoGene transMapAlnMRna ucscGenePfam qPcrPrimers transMapAlnUcscGenes transMapAlnRefSeq genscan bacEndPairs fosEndPairs'
+
+    # these tracks are hidden by default
+    hideTracks='intronEst cons100way cons46way ucscRetroAli5 mrna'
+
+    stopMysql
+
+    for db in $DBS; do
+       echo2 Downloading Mysql files for mysql database $db
+       $RSYNC $minRsyncOpt --exclude=* --progress -avzp $RSYNCOPTS $HGDOWNLOAD::mysql/$db/ $MYSQLDIR/$db/ 
+       chown -R $MYSQLUSER:$MYSQLUSER $MYSQLDIR/$db
+    done
+
+    echo2 Copying hgFixed.trackVersion
+    $RSYNC --progress -avzp $RSYNCOPTS $HGDOWNLOAD::mysql/hgFixed/trackVersion.* $MYSQLDIR/hgFixed/ 
+
+    startMysql
+
+    echo2 Hiding some tracks by default and removing some tracks from searches
+    for db in $DBS; do
+       echo $db
+       for track in $hideTracks; do
+            mysql $db -e 'UPDATE trackDb set visibility=0 WHERE tableName="'$track'"'
+        done
+
+       for track in $notSearchTables; do
+            mysql $db -e 'DELETE from hgFindSpec WHERE searchTable="'$track'"'
+        done
+    done
+    echo2 
+    echo2 The mirror should be functional now. It contains some basic assembly tables 
+    echo2 and will download missing data from the UCSC servers. This requires
+    echo2 two open ports, outgoing, TCP, from this machine:
+    echo2 - to genome-mysql.cse.ucsc.edu, port 3306, to load MySQL tables
+    echo2 - to hgdownload.cse.ucsc.edu, port 80, to download non-MySQL data files
+    echo2
+    showMyAddress
+    goOnline
+}
+
 function cleanTrash () 
 {
     echo2 Removing files older than one day in $TRASHDIR, not running on $TRASHDIR/ct
     find $TRASHDIR -not -path $TRASHDIR/ct/\* -and -type f -atime +1 -exec rm -f {} \;
+}
+
+function updateBrowser {
+   # update the CGIs
+   $RSYNC -avzP --exclude RNAplot --exclude hg.conf --exclude hg.conf.local $HGDOWNLOAD::cgi-bin/ $APACHEDIR/cgi-bin/ --exclude RNAplot
+   # update the html docs
+   echo2 Updating Apache htdocs
+   $RSYNC -avzP --exclude=*.{bb,bam,bai,bw,gz,2bit,bed} --exclude ENCODE --exclude trash $HGDOWNLOAD::htdocs/ $APACHEDIR/htdocs/ 
+   # assign all downloaded files to a valid user. 
+   chown -R $APACHEUSER:$APACHEUSER $APACHEDIR/*
+   echo
+
+   # update gbdb
+   DBS=`ls $GBDBDIR/`
+   echo updating GBDB: $DBS
+   for db in $DBS; do 
+       echo2 syncing gbdb: $db
+       rsync -avzp $RSYNCOPTS $HGDOWNLOAD::gbdb/$db/ $GBDBDIR/$db/ 
+   done
+
+   # update the mysql DBs
+   stopMysql
+   DBS=`ls /var/lib/mysql/ | egrep -v '(Trash$)|(hgTemp)|(^ib_)|(^ibdata)|(^mysql)|(performance)|(.flag$)|(hgcentral)'`
+   for db in $DBS/*; do 
+       echo2 syncing full mysql database: $db
+       $RSYNC --update --progress -avzp $RSYNCOPTS $HGDOWNLOAD::mysql/$db/ $MYSQLDIR/$db/
+   done
+   startMysql
+
+   echo2 update finished
 }
 # ------------ end of utility functions ----------------
 
@@ -1461,8 +1575,10 @@ DIST=none
 if [[ "$unameStr" == MINGW32_NT* ]] ; then
     echo Sorry Windows/CYGWIN is not supported
     exit 1
+fi
 
-elif [[ "$unameStr" == Darwin* ]]; then
+# set a few very basic variables we need to function
+if [[ "$unameStr" == Darwin* ]]; then
     OS=OSX
     DIST=OSX
     VER=`sw_vers -productVersion`
@@ -1508,48 +1624,23 @@ if [ "$DIST" == "none" ]; then
     exit 3
 fi
 
-# UPDATE MODE, parameter "update": This is not for the initial install, but
-# later, when the user wants to update the browser. This can be used from
-# cronjobs.
-
 if [ "${1:-}" == "install" ]; then
    installBrowser
+
 elif [ "${1:-}" == "download" ]; then
    downloadGenomes ${@:2} # all arguments after the second one
-elif [ "${1:-}" == "update" ]; then
-   # update the CGIs
-   $RSYNC -avzP --exclude RNAplot --exclude hg.conf --exclude hg.conf.local $HGDOWNLOAD::cgi-bin/ $APACHEDIR/cgi-bin/ --exclude RNAplot
-   # update the html docs
-   echo Updating Apache htdocs
-   $RSYNC -avzP --exclude=*.{bb,bam,bai,bw,gz,2bit,bed} --exclude ENCODE --exclude trash $HGDOWNLOAD::htdocs/ $APACHEDIR/htdocs/ 
-   # assign all downloaded files to a valid user. 
-   chown -R $APACHEUSER:$APACHEUSER $APACHEDIR/*
-   echo
 
-   # update gbdb
-   DBS=`ls $GBDBDIR/`
-   echo updating GBDB: $DBS
-   for db in $DBS/*; do 
-       echo syncing gbdb: $db
-       rsync -avzp $RSYNCOPTS $HGDOWNLOAD::gbdb/$db/ $GBDBDIR/$db/ 
-   done
+elif [ "${1:-}" == "minimal" ]; then
+   downloadMinimal ${@:2} # all arguments after the second one
 
-   # update the mysql DBs
-   DBS=`ls /var/lib/mysql/ | egrep -v '(Trash$)|(hgTemp)|(^ib_)|(^ibdata)|(^mysql)|(performance)|(.flag$)|(hgcentral)'`
-   for db in $DBS/*; do 
-       echo syncing full mysql database: $db
-       $RSYNC --update --progress -avzp $RSYNCOPTS $HGDOWNLOAD::mysql/$db $MYSQLDIR/$db
-   done
+elif [ "${1:-}" == "update" ]; then 
+   updateBrowser
 
-   echo update finished
-   exit 10
+elif [ "${1:-}" == "clean" ]; then
+    cleanTrash
+
 else
    echo Unknown command: $1
    echo "$HELP_STR"
    exit 1
-fi
-
-
-if [ "${1:-}" == "clean" ]; then
-    cleanTrash
 fi
