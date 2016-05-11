@@ -1040,12 +1040,17 @@ else
 fi
 }
    
+# check if a program exists in the PATH
+function commandExists () {
+    type "$1" &> /dev/null ;
+}
+
 # DETECT AND DEACTIVATE SELINUX: if it exists and is active
 function disableSelinux () 
 {
 # first check if the command exists on this system
 # then check if it comes back with a non-zero error code, which means it is enabled
-if [ type selinuxenabled > /dev/null 2> /dev/null ]; then
+if commandExists selinuxenabled; then
     if [ selinuxenabled ]; then
        echo2
        echo2 The Genome Browser requires that SELINUX is deactivated.
