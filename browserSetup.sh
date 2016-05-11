@@ -571,8 +571,8 @@ function installRedhat () {
     echo2 
     echo2 Installing EPEL, ghostscript, libpng
     waitKey
-    # make sure we have and EPEL and ghostscript
-    yum -y install epel-release ghostscript
+    # make sure we have and EPEL and ghostscript and rsync (not installed on vagrant boxes)
+    yum -y install epel-release ghostscript rsync
 
     # centos 7 and fedora 20 do not provide libpng by default
     if ldconfig -p | grep libpng12.so > /dev/null; then
