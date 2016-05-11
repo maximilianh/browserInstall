@@ -1059,7 +1059,13 @@ if commandExists selinuxenabled; then
        # deactivate selinux until next reboot
        setenforce 0
        # permanently deactivate after next reboot
-       sed -i 's/^SELINUX=enforcing/SELINUX=disabled/g' /etc/sysconfig/selinux
+       if [ -f /etc/sysconfig/selinux ]; then
+           sed -i 's/^SELINUX=enforcing/SELINUX=disabled/g' /etc/sysconfig/selinux
+       fi
+       # centos 7 seems to have another config files for this
+       if [ -f /etc/selinux/config ]; then
+           sed -i 's/^SELINUX=enforcing/SELINUX=disabled/g' /etc/selinux/config
+       fi
     fi
 fi
 }
