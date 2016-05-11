@@ -316,7 +316,7 @@ command is one of:
   install    - install the genome browser in this machine
   minimal    - download only a minimal set of tables. Missing tables are
                downloaded on-the-fly from UCSC.
-  download   - download a full assembly (for hg19, see the -t option below).
+  download   - download a full assembly (also see the -t option below).
                No data is downloaded on-the-fly from UCSC.
   update     - update the genome browser binaries and data, mirrors
                all tables of an assembly
@@ -333,9 +333,9 @@ examples:
   bash $0 minimal hg19 - download only the minimal tables for the hg19 assembly
   bash $0 download hg19 mm9 - download hg19 and mm9, switch
                         to offline mode (see the -o option)
-  bash $0 download -t noEncode hg19  - install Genome Browser, download hg19 but no
-                              ENCODE tables, then switch to offline mode (see the -o
-                              option)
+  bash $0 download -t noEncode hg19  - install Genome Browser, download hg19 
+                        but no ENCODE tables and switch to offline mode 
+                        (see the -o option)
   bash $0 update     -  update the Genome Browser CGI programs
   bash $0 clean      -  remove temporary files
 
@@ -344,13 +344,14 @@ All options have to precede the list of genome assemblies.
 options:
   -a   - use alternative download server at SDSC
   -b   - batch mode, do not prompt for key presses
-  -t   - hg19-only download track selection, requires a value.
+  -t   - only download track selection, requires a value.
+         This option is only useful for Human/Mouse assemblies.
          Download only certain tracks, possible values:
          noEncode = do not download any tables with the wgEncode prefix, 
                     except Gencode genes, saves 4TB/6TB for hg19
          bestEncode = our ENCODE recommendation, all summary tracks, saves
-                      2TB/6TB for hg19
-         main = only RefSeq/Gencode genes and SNPs, 5GB for hg19
+                    2TB/6TB for hg19
+         main = only RefSeq/Gencode genes and SNPs, total 5GB for hg19
   -u   - use UDR (fast UDP) file transfers for the download.
          Requires at least one open UDP incoming port 9000-9100.
          (UDR is not available for Mac OSX)
